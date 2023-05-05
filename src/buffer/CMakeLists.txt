@@ -9,3 +9,9 @@ add_library(
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:bustub_buffer>
         PARENT_SCOPE)
+
+# include_directories(../../include/buffer)
+
+# add_executable(test.out 
+#         lru_k_replacer.cpp
+#         lru_k_replacer_test.cpp)

@@ -16,6 +16,7 @@
 #include <list>
 #include <mutex>  // NOLINT
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "common/config.h"
@@ -26,13 +27,25 @@ namespace bustub {
 enum class AccessType { Unknown = 0, Get, Scan };
 
 class LRUKNode {
- private:
+ public:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
 
-  [[maybe_unused]] std::list<size_t> history_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] frame_id_t fid_;
+  explicit LRUKNode(frame_id_t frame_id);
+
+  auto GetIsEvictable() const -> bool { return is_evictable_; }
+  void SetIsEvictable(bool evictable) { is_evictable_ = evictable; }
+  
+  auto GetK() const -> size_t { return k_; };
+  void SetK() { ++k_; };
+
+  auto GetFrameId() const -> size_t { return fid_; }
+
+ private:
+  // [[maybe_unused]] std::list<size_t> history_;
+  // k_是访问次数
+  [[maybe_unused]] size_t k_{1};
+  [[maybe_unused]] frame_id_t fid_; // 其实冗余了
   [[maybe_unused]] bool is_evictable_{false};
 };
 
@@ -91,7 +104,7 @@ class LRUKReplacer {
    * @brief Record the event that the given frame id is accessed at current timestamp.
    * Create a new entry for access history if frame id has not been seen before.
    *
-   * If frame id is invalid (ie. larger than replacer_size_), throw an exception. You can
+   * If frame id is invalid (ie. larger than replacer_size_,(actually， the author mean replacer_size_ is max capacity)), throw an exception. You can
    * also use BUSTUB_ASSERT to abort the process if frame id is invalid.
    *
    * @param frame_id id of frame that received a new access.
@@ -148,14 +161,41 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
+  // non-thread-safe
+  void RemoveImpl(frame_id_t frame_id);
+  // non-thread-safe
+  auto EvictImpl(frame_id_t *frame_id) -> bool;
+
+ private:
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
-  [[maybe_unused]] std::unordered_map<frame_id_t, LRUKNode> node_store_;
-  [[maybe_unused]] size_t current_timestamp_{0};
-  [[maybe_unused]] size_t curr_size_{0};
-  [[maybe_unused]] size_t replacer_size_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] std::mutex latch_;
+  // [[maybe_unused]] std::unordered_map<frame_id_t, LRUKNode> node_store_;
+  // [[maybe_unused]] size_t current_timestamp_{0};
+  // [[maybe_unused]] size_t curr_size_{0};
+  // [[maybe_unused]] size_t replacer_size_;
+  // [[maybe_unused]] size_t k_;
+  // [[maybe_unused]] std::mutex latch_;
+
+
+  // LRU-K算法简单来说就是，当访问够k次的数据块在一起进行一个LRU的淘汰规则，同时不够k次的数据块则是一个先进先出策略
+  // 我们使用两个链表来实现LRU-K算法，一个队列用来实现不够k次的数据块FIFO，一个队列用来实现够k次数据块的LRU
+  // 同时为了实现根据frame_id来实现O(1)的查找，肯定要用map了
+
+  // 但是需要实现随机删除，所以还是需要随机找到list中的，所以使用pair，存放list中的iterator，又存放LRUKNode
+  using NodePair = std::pair<std::list<frame_id_t>::iterator, LRUKNode>;
+
+  std::unordered_map<frame_id_t, NodePair> nodes_;
+
+  // 如果有很多是is_evictable_==false，即不可以删除的，那么我们这个链表就要遍历到第一个满足可以删除的
+  std::list<frame_id_t> non_k_nodes_fifo_;  // FIFO
+  std::list<frame_id_t> k_nodes_lru_;       // LUR
+
+  size_t max_frame_capacity_;
+  size_t k_;
+  // size_t curr_size_{0};  // 使用nondes_.size()代替
+  size_t replacer_size_{0}; // 有多少可以置换出去的
+  std::mutex latch_;
+  
 };
 
 }  // namespace bustub

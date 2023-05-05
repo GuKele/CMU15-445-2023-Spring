@@ -273,6 +273,25 @@ set(P1_FILES
         "src/include/buffer/buffer_pool_manager.h"
         "src/buffer/buffer_pool_manager.cpp"
 )
+
+
+# https://blog.csdn.net/MacKendy/article/details/122693478
+
+set(P1_FILES_TEST
+        "src/include/storage/page/page_guard.h"
+        "src/storage/page/page_guard.cpp"
+        "src/include/buffer/lru_k_replacer.h"
+        "src/buffer/lru_k_replacer.cpp"
+        "src/include/buffer/buffer_pool_manager.h"
+        "src/buffer/buffer_pool_manager.cpp"
+        "scr/buffer/lru_k_replacer_test.cpp"
+)
+
+add_custom_target(test_pi
+        
+        ${P1_FILES}
+)
+
 add_custom_target(check-clang-tidy-p1
         ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py # run LLVM's clang-tidy script
         -clang-tidy-binary ${CLANG_TIDY_BIN} # using our clang-tidy binary

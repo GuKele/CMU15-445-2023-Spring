@@ -148,7 +148,7 @@ class BufferPoolManager {
    * @param page_id id of page to be flushed, cannot be INVALID_PAGE_ID
    * @return false if the page could not be found in the page table, true otherwise
    */
-  auto FlushPage(page_id_t page_id) -> bool;
+  auto FlushPage(page_id_t page_id) -> bool;  
 
   /**
    * TODO(P1): Add implementation
@@ -173,6 +173,21 @@ class BufferPoolManager {
   auto DeletePage(page_id_t page_id) -> bool;
 
  private:
+  // 调用前检查frame_id合法性
+  void PinPate(frame_id_t frame_id) { 
+    if(pages_[frame_id].pin_count_ == 0) {
+      replacer_->SetEvictable(frame_id, false);
+    }
+    ++pages_[frame_id].pin_count_; 
+  }
+
+  // non-thread-safe
+  auto NewPageImpl(page_id_t *page_id) -> Page *;
+
+  // non-thread-safe
+  auto FlushPageImpl(page_id_t page_id) -> bool;
+
+ private:
   /** Number of pages in the buffer pool. */
   const size_t pool_size_;
   /** The next page id to be allocated  */
@@ -189,6 +204,7 @@ class BufferPoolManager {
   /** Replacer to find unpinned pages for replacement. */
   std::unique_ptr<LRUKReplacer> replacer_;
   /** List of free frames that don't have any pages on them. */
+  // keep bezero frame in the free_list_
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   std::mutex latch_;

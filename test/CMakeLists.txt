@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 include(GoogleTest)
 
+# GLOB_RECURSE是递归搜索的意思，功能和aux_source_directory()类似，但是更自由，前者只能加源文件，而file自己匹配
 file(GLOB_RECURSE BUSTUB_TEST_SOURCES "${PROJECT_SOURCE_DIR}/test/*/*test.cpp")
 
 # #####################################################################################################################
@@ -96,3 +97,4 @@ add_dependencies(test-p3 sqllogictest)
 # Must build sqllogictest before checking tests
 add_dependencies(build-tests sqllogictest)
 add_dependencies(check-tests sqllogictest)
+
