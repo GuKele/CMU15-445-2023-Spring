@@ -10,10 +10,7 @@ class BasicPageGuard {
  public:
   BasicPageGuard() = default;
 
-  BasicPageGuard(BufferPoolManager *bpm, Page *page) 
-    : bpm_(bpm), 
-      page_(page) 
-  {}
+  BasicPageGuard(BufferPoolManager *bpm, Page *page);
 
   BasicPageGuard(const BasicPageGuard &) = delete;
   auto operator=(const BasicPageGuard &) -> BasicPageGuard & = delete;
@@ -28,7 +25,7 @@ class BasicPageGuard {
    * example, it should not be possible to call .Drop() on both page
    * guards and have the pin count decrease by 2.
    */
-  BasicPageGuard(BasicPageGuard &&that) noexcept;
+  BasicPageGuard(BasicPageGuard &&other) noexcept;
 
   /** TODO(P1): Add implementation
    *
@@ -51,7 +48,7 @@ class BasicPageGuard {
    * a guard replaces its held page with a different one, given
    * the purpose of a page guard.
    */
-  auto operator=(BasicPageGuard &&that) noexcept -> BasicPageGuard &;
+  auto operator=(BasicPageGuard &&other) noexcept -> BasicPageGuard &;
 
   /** TODO(P1): Add implementation
    *
@@ -81,11 +78,20 @@ class BasicPageGuard {
     return reinterpret_cast<T *>(GetDataMut());
   }
 
+ protected:
+  // inline关键字必须在定义处存在，并且inline函数的定义要放在头文件
+  // 干脆直接定义在class中,也不需要inline关键字了，但是还是带上吧
+  inline void ClearAllContents() {
+    bpm_ = nullptr;
+    page_ = nullptr;
+    // is_dirty_ = false;
+  }
+
  private:
   friend class ReadPageGuard;
   friend class WritePageGuard;
 
-  [[maybe_unused]] BufferPoolManager *bpm_{nullptr};
+  BufferPoolManager *bpm_{nullptr};
   Page *page_{nullptr};
   bool is_dirty_{false};
 };
@@ -93,7 +99,11 @@ class BasicPageGuard {
 class ReadPageGuard {
  public:
   ReadPageGuard() = default;
-  ReadPageGuard(BufferPoolManager *bpm, Page *page) : guard_(bpm, page) {}
+  ReadPageGuard(BufferPoolManager *bpm, Page *page) : guard_(bpm, page) {
+    // if (page != nullptr) {
+    //   page->RLatch();
+    // }
+  }
   ReadPageGuard(const ReadPageGuard &) = delete;
   auto operator=(const ReadPageGuard &) -> ReadPageGuard & = delete;
 
@@ -105,7 +115,7 @@ class ReadPageGuard {
    * a ReadPageGuard using another ReadPageGuard. Think
    * about if there's any way you can make this easier for yourself...
    */
-  ReadPageGuard(ReadPageGuard &&that) noexcept;
+  ReadPageGuard(ReadPageGuard &&other) noexcept;
 
   /** TODO(P1): Add implementation
    *
@@ -146,6 +156,9 @@ class ReadPageGuard {
   }
 
  private:
+  inline void ClearAllContents() { guard_.ClearAllContents(); }
+
+ private:
   // You may choose to get rid of this and add your own private variables.
   BasicPageGuard guard_;
 };
@@ -153,7 +166,11 @@ class ReadPageGuard {
 class WritePageGuard {
  public:
   WritePageGuard() = default;
-  WritePageGuard(BufferPoolManager *bpm, Page *page) : guard_(bpm, page) {}
+  WritePageGuard(BufferPoolManager *bpm, Page *page) : guard_(bpm, page) {
+    // if (page != nullptr) {
+    //   page->WLatch();
+    // }
+  }
   WritePageGuard(const WritePageGuard &) = delete;
   auto operator=(const WritePageGuard &) -> WritePageGuard & = delete;
 

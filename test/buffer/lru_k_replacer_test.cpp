@@ -16,8 +16,14 @@
 
 namespace bustub {
 
-TEST(LRUKReplacerTest, DISABLED_SampleTest) {
+// TEST(LRUKReplacerTest, DISABLED_SampleTest) {
+TEST(LRUKReplacerTest, SampleTest) {
   LRUKReplacer lru_replacer(7, 2);
+
+  // 不知道为什么必须在这里添加一个类似的unordered_map才能让lldb中的类似的hash map显示出元素来
+  using NodePair = std::pair<std::list<bustub::frame_id_t>::iterator, bustub::LRUKNode>;
+
+  std::unordered_map<bustub::frame_id_t, NodePair> myset = {{111, NodePair{nullptr, bustub::LRUKNode(555)}}};
 
   // Scenario: add six elements to the replacer. We have [1,2,3,4,5]. Frame 6 is non-evictable.
   lru_replacer.RecordAccess(1);

@@ -137,6 +137,9 @@ class BufferPoolManager {
    */
   auto UnpinPage(page_id_t page_id, bool is_dirty, AccessType access_type = AccessType::Unknown) -> bool;
 
+  // 没什么用的接口
+  // auto PinPage(page_id_t page_id) -> bool;
+
   /**
    * TODO(P1): Add implementation
    *
@@ -148,7 +151,7 @@ class BufferPoolManager {
    * @param page_id id of page to be flushed, cannot be INVALID_PAGE_ID
    * @return false if the page could not be found in the page table, true otherwise
    */
-  auto FlushPage(page_id_t page_id) -> bool;  
+  auto FlushPage(page_id_t page_id) -> bool;
 
   /**
    * TODO(P1): Add implementation
@@ -172,20 +175,57 @@ class BufferPoolManager {
    */
   auto DeletePage(page_id_t page_id) -> bool;
 
- private:
-  // 调用前检查frame_id合法性
-  void PinPate(frame_id_t frame_id) { 
-    if(pages_[frame_id].pin_count_ == 0) {
-      replacer_->SetEvictable(frame_id, false);
-    }
-    ++pages_[frame_id].pin_count_; 
-  }
+ private:  // the function in this private scope are non-thread-safe
+  /**
+   * @brief pin the page, you should promise the frame_id
+   *
+   * @param frame_id
+   */
+  void PinPageImpl(frame_id_t frame_id);
 
   // non-thread-safe
   auto NewPageImpl(page_id_t *page_id) -> Page *;
 
   // non-thread-safe
   auto FlushPageImpl(page_id_t page_id) -> bool;
+
+  /**
+   * @brief Get the Avail Frame, non-thread-safe
+   *
+   * @param frame_id id of frame avaliable
+   * @return true if we can get a frame avaliable
+   */
+  auto GetAvailFrame(frame_id_t *frame_id) -> bool;
+
+  /**
+   * @brief reset metadata of page, you should promise the pointer of page is right
+   *
+   * @param page the page to be reseted metadata
+   * @return void
+   */
+  inline void ResetPageMetadata(Page *page) {
+    page->pin_count_ = 0;
+    page->page_id_ = 0;
+    page->is_dirty_ = false;
+    // page->rwlatch_;
+  }
+
+  /**
+   * @brief add a page into the frame,record the access history of the frame in the replacer for the lru-k algorithm to
+   * work,pin the page,you should promise the frame of frame_id is available
+   *
+   * @param page_id id of page to be added
+   * @param frame_id id of frame to be used by page
+   */
+  void AddPage(page_id_t page_id, frame_id_t frame_id);
+
+  /**
+   * @brief delete the page in frame of frame_id and delete this frame from lru_k_replacer
+   * you should promise the frame of frame_id can be deleted
+   *
+   * @param frame_id id of frame to be deleted
+   */
+  void DeletePageImpe(frame_id_t frame_id);
 
  private:
   /** Number of pages in the buffer pool. */
@@ -213,7 +253,7 @@ class BufferPoolManager {
    * @brief Allocate a page on disk. Caller should acquire the latch before calling this function.
    * @return the id of the allocated page
    */
-  auto AllocatePage() -> page_id_t;
+  inline auto AllocatePage() -> page_id_t { return next_page_id_++; }
 
   /**
    * @brief Deallocate a page on disk. Caller should acquire the latch before calling this function.
