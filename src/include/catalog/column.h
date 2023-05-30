@@ -36,7 +36,8 @@ class Column {
    * @param type type of the column
    */
   Column(std::string column_name, TypeId type)
-      : column_name_(std::move(column_name)), column_type_(type), fixed_length_(TypeSize(type)) {
+    : column_name_(std::move(column_name)), column_type_(type), fixed_length_(TypeSize(type))
+  {
     BUSTUB_ASSERT(type != TypeId::VARCHAR, "Wrong constructor for VARCHAR type.");
   }
 
@@ -48,10 +49,11 @@ class Column {
    * @param expr expression used to create this column
    */
   Column(std::string column_name, TypeId type, uint32_t length)
-      : column_name_(std::move(column_name)),
-        column_type_(type),
-        fixed_length_(TypeSize(type)),
-        variable_length_(length) {
+    : column_name_(std::move(column_name)),
+      column_type_(type),
+      fixed_length_(TypeSize(type)),
+      variable_length_(length)
+  {
     BUSTUB_ASSERT(type == TypeId::VARCHAR, "Wrong constructor for non-VARCHAR type.");
   }
 
@@ -61,11 +63,12 @@ class Column {
    * @param column the original column
    */
   Column(std::string column_name, const Column &column)
-      : column_name_(std::move(column_name)),
-        column_type_(column.column_type_),
-        fixed_length_(column.fixed_length_),
-        variable_length_(column.variable_length_),
-        column_offset_(column.column_offset_) {}
+    : column_name_(std::move(column_name)),
+      column_type_(column.column_type_),
+      fixed_length_(column.fixed_length_),
+      variable_length_(column.variable_length_),
+      column_offset_(column.column_offset_)
+  { }
 
   /** @return column name */
   auto GetName() const -> std::string { return column_name_; }

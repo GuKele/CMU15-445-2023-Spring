@@ -26,7 +26,7 @@ namespace bustub {
 
 // define page type enum
 enum class IndexPageType { INVALID_INDEX_PAGE = 0, LEAF_PAGE, INTERNAL_PAGE };
-
+enum class BPlusTreeOption { INSERT = 0, DELETE };
 /**
  * Both internal and leaf page are inherited from this page.
  *
@@ -55,6 +55,14 @@ class BPlusTreePage {
   auto GetMaxSize() const -> int;
   void SetMaxSize(int max_size);
   auto GetMinSize() const -> int;
+  auto IsFull() const -> bool;
+  auto IsEmpty() const -> bool;
+  /**
+   * @brief 检查插入一个k-v后是否安全，安全即不需要分裂
+   *
+   * @return true
+   */
+  auto IsSafeAfterOption(BPlusTreeOption opt) const -> bool;
 
  private:
   // member variable, attributes that both internal and leaf page share

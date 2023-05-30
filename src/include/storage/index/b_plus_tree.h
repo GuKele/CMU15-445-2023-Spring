@@ -17,6 +17,7 @@
 #include <queue>
 #include <shared_mutex>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "common/config.h"
@@ -26,7 +27,9 @@
 #include "storage/page/b_plus_tree_header_page.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
 #include "storage/page/page_guard.h"
+#include "type/value.h"
 
 namespace bustub {
 
@@ -47,6 +50,8 @@ class Context {
   // Save the root page id here so that it's easier to know if the current page is the root page.
   page_id_t root_page_id_{INVALID_PAGE_ID};
 
+  // std::deque<std::variant<ReadPageGuard, WritePageGuard>> guard_set_;
+
   // Store the write guards of the pages that you're modifying here.
   std::deque<WritePageGuard> write_set_;
 
@@ -61,6 +66,7 @@ class Context {
 // Main class providing the API for the Interactive B+ Tree.
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTree {
+  using BasePage = BPlusTreePage;
   using InternalPage = BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>;
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
 
@@ -116,25 +122,134 @@ class BPlusTree {
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name, Transaction *txn = nullptr);
 
+  enum class Options {
+    INSERT = 0,
+    DELETE
+  };
+
  private:
+
+  // auto GetRootPageId(Options opt, Context *ctx = nullptr) const -> page_id_t;
+  // auto GetRootPageId(Options opt, Context *ctx = nullptr) const -> page_id_t;
+  auto GetRootPageIdForRead(Context *ctx = nullptr) const -> page_id_t;
+  auto GetRootPageIdForInsert(Context *ctx) -> page_id_t;
+
+  /**
+   * @brief 找到key-value可能存在的叶子节点
+   *
+   * 只读，所以查找叶子节点的过程中拿到孩子的读锁就释放父亲的读锁
+   * @param key
+   * @param context
+   * @return nullptr表示树空
+   */
+  auto FindLeafForRead(const KeyType &key, Context* context) -> const LeafPage *;
+
+  /**
+   * @brief 为了插入或删除，找到叶子节点。
+   *
+   * 会拿写锁，所以当找到一个安全node(即插入不会分裂，那么其父亲也就不会插入了，父亲不需要写锁了;或者删除不会借兄弟或者合并兄弟)
+   * 保证了不会修改父亲以及祖先，马上释放之前拿到的所有祖先写锁，注意如果没有更改不需要GetDataMut()给page置为脏叶
+   * @param context
+   * @param opt 指明是插入或删除而查找叶子节点
+   * @return nullptr表示树空
+   */
+  auto FindLeafForOption(const KeyType &key, Context *context, BPlusTreeOption opt) -> LeafPage *;
+
+  /**
+   * @brief
+   *
+   * @param leaf_node
+   * @param key
+   * @return LeafPage*
+   */
+  auto SplitLeaf(LeafPage *leaf_node) -> LeafPage *;
+
+  /**
+   * @brief 创建一个新叶子作为树根,并更新root_page_id,并且在叶子中插入第一个键值对
+   *
+   * @param context 存放了write_header_page_guard
+   * @return false
+   */
+  auto CreateNewTree(const KeyType &key, const ValueType &value, Context *context) -> bool;
+
+  /**
+   * @brief 将右兄弟的key和page_id插入到父亲节点
+   *        1.如果父亲节点不存在(即当前分裂的节点就是root)，则创建新的root
+   *        2.如果父亲节点存在但是父亲节点满了，我们就需要分裂父亲节点，再递归往上插入
+   *        3.如果父亲节点存在并且没有满，直接插入就可以了
+   * @param key 右兄弟对应的key
+   * @param value 右兄弟的page_id
+   * @param context write_set_最后一个元素是孩子节点(left_page_guard),倒数第二个(如果有，即这个孩子不是root)是被插入的父亲page
+   * @return true
+   * @return false
+   */
+  auto InsertIntoParent(const KeyType &key, const page_id_t &value, Context *context) -> bool;
+
+  /**
+   * @brief 创建新的root_node,并且更新
+   *
+   * @param left
+   * @param key
+   * @param right
+   * @param context
+   * @return true
+   * @return false
+   */
+  auto CreateNewRoot(const page_id_t &left, const KeyType &key, const page_id_t &right, Context *context) -> bool;
+
+  /**
+   * @brief 分裂internal节点,并且插入key-value
+   * 在下面展示中，插入key==5的键值对，分裂pid==101的internal node,分裂后返回{key=7, page_id=103}
+   *
+   * 插入并分裂前：
+   *                                               father-internal
+   *                                         --------------------------
+   *                                         |              k2(12)    |
+   *                                         | pid1(101)    pid2(102) |
+   *                                         --------------------------
+   *                      child-internal pid(101)                child-internale pid(102)
+   *  -----------------------------------------------------           ----------
+   *  |              k2(3)       k3(7)        k4(9)       |           |        |
+   *  |  pid1(-∞,3)  pid2[3,7)   pid3[7,9)    pid4[9,+∞)  |           |        |
+   *  -----------------------------------------------------           ----------
+   *
+   * 分裂并插入父亲节点后：
+   *                                             father-internal
+   *                                  --------------------------------------
+   *                                  |              k2(7)       k3(12)    |
+   *                                  | pid1(101)    pid2(103)   pid3(102) |
+   *                                  --------------------------------------
+   *
+   *        child-internal   pid(101)         new child-internal  pid(103)    child-internale pid(102)
+   *  --------------------------------------   ---------------------------          ----------
+   *  |              k2(3)       k3(5)     |   |              k2(9)      |          |        |
+   *  | pid1(-∞,3)   pid2[3,7)   pid3[5,7) |   | pid1[7,9)    pid2[9,+∞) |          |        |
+   *  --------------------------------------   ---------------------------          ----------
+   *
+   * @param i_node 要分裂的internnal node
+   * @return 返回新internal节点的key和page_id用于插入父亲节点。如果分配新page失败，返回INVALID_PAGE_ID
+   */
+  auto InsertAndSplitInternal(InternalPage *i_node, const KeyType &key, const page_id_t &value) -> std::pair<KeyType, page_id_t>;
+
   /* Debug Routines for FREE!! */
-  void ToGraph(page_id_t page_id, const BPlusTreePage *page, std::ofstream &out);
+  void ToGraph(page_id_t page_id, const BPlusTreePage *page,
+              std::ofstream &out);
 
   void PrintTree(page_id_t page_id, const BPlusTreePage *page);
 
   /**
-   * @brief Convert A B+ tree into a Printable B+ tree
-   *
-   * @param root_id
-   * @return PrintableNode
-   */
+  * @brief Convert A B+ tree into a Printable B+ tree
+  *
+  * @param root_id
+  * @return PrintableNode
+  */
   auto ToPrintableBPlusTree(page_id_t root_id) -> PrintableBPlusTree;
 
   // member variable
   std::string index_name_;
   BufferPoolManager *bpm_;
   KeyComparator comparator_;
-  std::vector<std::string> log;  // NOLINT
+  std::vector<std::string> log; // NOLINT
   int leaf_max_size_;
   int internal_max_size_;
   page_id_t header_page_id_;

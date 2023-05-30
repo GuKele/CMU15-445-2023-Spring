@@ -51,6 +51,17 @@ class Page {
   /** @return true if the page in memory has been modified from the page on disk, false otherwise */
   inline auto IsDirty() -> bool { return is_dirty_; }
 
+  /**
+   * @brief 设置为脏页，用不到，在UnpinPage中设置了是否是脏页，不需要这个接口
+   *
+   * @return 返回之前是否为脏页
+   */
+  inline auto SetDirty() -> bool {
+    auto old = is_dirty_;
+    is_dirty_ = true;
+    return old;
+  }
+
   /** Acquire the page write latch. */
   inline void WLatch() { rwlatch_.WLock(); }
 
@@ -84,6 +95,7 @@ class Page {
   /** The actual data that is stored within a page. */
   // Usually this should be stored as `char data_[BUSTUB_PAGE_SIZE]{};`. But to enable ASAN to detect page overflow,
   // we store it as a ptr.
+  // b+树中，data_就是b+树的一个node
   char *data_;
   /** The ID of this page. */
   page_id_t page_id_ = INVALID_PAGE_ID;

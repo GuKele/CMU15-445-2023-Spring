@@ -25,6 +25,7 @@ namespace bustub {
  * This key type uses an fixed length array to hold data for indexing
  * purposes, the actual size of which is specified and instantiated
  * with a template argument.
+ * 以字节的形式来处理key-tuple
  */
 template <size_t KeySize>
 class GenericKey {

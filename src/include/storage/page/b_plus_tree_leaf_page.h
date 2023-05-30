@@ -14,7 +14,9 @@
 #include <utility>
 #include <vector>
 
+#include "common/config.h"
 #include "storage/page/b_plus_tree_page.h"
+#include "type/value.h"
 
 namespace bustub {
 
@@ -58,6 +60,36 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
+  auto ValueAt(int index) const -> ValueType;
+
+  /**
+   * @brief 返回key对应的value， 好像还不如自己实现折半查找
+   *
+   * @param key
+   * @param val 存储返回的value
+   * @param comparator
+   * @return false 没有查到
+   */
+  auto ValueOfKey(const KeyType &key, ValueType *val, const KeyComparator& comparator) const -> bool;
+
+  /**
+   * @brief 插入键值对到leaf node
+   *
+   * @param key
+   * @param val
+   * @param comparator
+   * @return false 插入重复key会返回失败
+   */
+  auto Insert(const KeyType &key, const ValueType &val, const KeyComparator& comparator) -> bool;
+
+  /**
+   * @brief 移动下标[start, end)的键值对到空的destination
+   *
+   * @param start 移动开始的下标
+   * @param destination 空BPlusTreeLeafPage目的地
+   */
+  void MoveTo(int start, BPlusTreeLeafPage *destination);
+
 
   /**
    * @brief for test only return a string representing all keys in
@@ -84,8 +116,13 @@ class BPlusTreeLeafPage : public BPlusTreePage {
     return kstr;
   }
 
+  auto Back() const -> MappingType {
+    assert(GetSize() >= 1);
+    return array_[GetSize() - 1];
+  }
+
  private:
-  page_id_t next_page_id_;
+  page_id_t next_page_id_ = INVALID_PAGE_ID;
   // Flexible array member for page data.
   MappingType array_[0];
 };

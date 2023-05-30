@@ -6,6 +6,10 @@ namespace bustub {
 
 class BufferPoolManager;
 
+/**
+ * @brief 和传统的RAII手法不太一样，初始化并不获取锁，而只是在析构时释放锁
+ *
+ */
 class BasicPageGuard {
  public:
   BasicPageGuard() = default;
@@ -58,6 +62,12 @@ class BasicPageGuard {
    * the page guard was dropped.
    */
   ~BasicPageGuard();
+
+  /**
+   * @brief 判读guard是否是一个有效的guard
+   *
+   */
+  auto IsValiad() -> bool { return page_ != nullptr; }
 
   auto PageId() -> page_id_t { return page_->GetPageId(); }
 
@@ -148,6 +158,7 @@ class ReadPageGuard {
 
   auto PageId() -> page_id_t { return guard_.PageId(); }
 
+  // 读guard只有这个，而没有GetDataMut()
   auto GetData() -> const char * { return guard_.GetData(); }
 
   template <class T>

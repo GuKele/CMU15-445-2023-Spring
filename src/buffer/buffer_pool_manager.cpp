@@ -52,10 +52,10 @@ auto BufferPoolManager::NewPageImpl(page_id_t *page_id) -> Page * {
     *page_id = AllocatePage();
 
     AddPage(*page_id, frame_id);
-
     return &pages_[frame_id];
   }
 
+  *page_id = INVALID_PAGE_ID;
   return nullptr;
 }
 

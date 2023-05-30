@@ -11,7 +11,8 @@ project(BusTub
 )
 
 # TODO 似乎能解决lldb debug时的bug，似乎是lldb在debug的时候为了优化，少打印一些重要的参数，导致无法可视化和print
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-limit-debug-info")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-limit-debug-info -fstandalone-debug")
+# add_compile_options(-fstandalone-debug)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
         message(STATUS "Setting build type to `Debug` as none was specified.")
