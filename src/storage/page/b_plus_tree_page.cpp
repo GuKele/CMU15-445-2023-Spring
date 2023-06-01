@@ -56,7 +56,15 @@ auto BPlusTreePage::IsFull() const -> bool {
 }
 
 auto BPlusTreePage::IsEmpty() const -> bool {
-  return GetSize() == 0;
+  if(IsLeafPage()) {
+    return GetSize() == 0;
+  }
+  // internal node没key的时候，只有第一个val,就为空
+  return GetSize() == 1;
+}
+
+auto BPlusTreePage::IsSafe() const -> bool {
+  return GetSize() >= GetMinSize();
 }
 
 auto BPlusTreePage::IsSafeAfterOption(BPlusTreeOption opt) const -> bool {

@@ -56,7 +56,12 @@ TEST(BPlusTreeTests, ScaleTest) {  // NOLINT
   // randomized the insertion order
   auto rng = std::default_random_engine{};
   std::shuffle(keys.begin(), keys.end(), rng);
+  int count = 0;
   for (auto key : keys) {
+    ++count;
+    if(count == 100) {
+      std::cout << "test" << std::endl;
+    }
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);

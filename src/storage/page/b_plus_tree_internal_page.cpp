@@ -15,6 +15,7 @@
 #include <iterator>
 #include <sstream>
 
+#include "common/config.h"
 #include "common/exception.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_page.h"
@@ -79,8 +80,65 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &valu
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
+  if(index < 0 || index >= GetSize()) {
+    return INVALID_PAGE_ID;
+  }
   return array_[index].second;
 }
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopBack() {
+  if(!IsEmpty()) {
+    IncreaseSize(-1);
+  }
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopFront() {
+  int n = GetSize();
+  if (!IsEmpty()) {
+    IncreaseSize(-1);
+  }
+  for (int i = 1; i < n; ++i) {
+    array_[i - 1] = array_[i];
+  }
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PushBack(const MappingType &val) {
+  assert(!IsFull());
+  array_[GetSize()] = val;
+  IncreaseSize(1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::EmplaceBack(const KeyType &key, const ValueType &val) {
+  assert(!IsFull());
+  array_[GetSize()] = {key, val};
+  IncreaseSize(1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PushFrontValue(const ValueType &val) {
+  assert(!IsFull());
+  int n = GetSize();
+  for (int i = n; i > 0; --i) {
+    array_[i] = array_[i - 1];
+  }
+  array_[0].second = val;
+  IncreaseSize(1);
+}
+
+// INDEX_TEMPLATE_ARGUMENTS
+// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::EmplaceFront(const ValueType &val) {
+//   assert(!IsFull());
+//   int n = GetSize();
+//   for (int i = n; i > 0; --i) {
+//     array_[i] = array_[i - 1];
+//   }
+//   array_[0].second = val;
+//   IncreaseSize(1);
+// }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyComparator& comparator, int *index) const -> ValueType {
@@ -103,48 +161,74 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyCompara
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator& comparator) {
-  int i = GetSize() - 1;
-  for( ; i > 0 ; --i) {
-    if(comparator(KeyAt(i), key) < 0) {
-      break;
-    }
-    // array_[i + 1] = std::move(array_[i]);
-    array_[i + 1] = array_[i];
-
-    // if(comparator(KeyAt(i), key) > 0) {
-    //   array_[i + 1] = array_[i];
-    // } else {
-    //   IncreaseSize(1);
-    //   array_[i + 1] = {key, value};
-    //   return;
-    // }
-  }
-
-  // // 没有比key小的key,所以应该插入到1的位置
-  // if(comparator(KeyAt(1), key) > 0) {
-  //   IncreaseSize(1);
-  //   array_[1] = {key, value};
-  // }
-
-  IncreaseSize(1);
-  array_[i + 1] = {key, value};
+  int index = -1;
+  Search(key, comparator, &index);
+  ++index;
+  InsertAt(index, key, value);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveTo(int start, BPlusTreeInternalPage *destination) {
-  if(start >= GetSize() || start < 1) {
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAt(int index, const KeyType &key, const ValueType &value) {
+  for (int i = GetSize() - 1; i >= index; --i) {
+    array_[i + 1] = array_[i];
+  }
+  IncreaseSize(1);
+  array_[index] = {key, value};
+}
+
+// INDEX_TEMPLATE_ARGUMENTS
+// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveTo(int start, BPlusTreeInternalPage *destination) {
+//   if(start >= GetSize() || start < 1) {
+//     throw Exception(ExceptionType::OUT_OF_RANGE, "error start");
+//   }
+//   if(!destination->IsEmpty()) {
+//     throw Exception(ExceptionType::EXECUTION, "Cannot move to non-empty leaf node");
+//   }
+
+//   int n = GetSize();
+//   for(int i = 0 ; i + start < n ; ++i) {
+//     destination->array_[i] = array_[start + i];
+//   }
+//   SetSize(start);
+//   destination->SetSize(n - start);
+// }
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MergeToLeftBro(BPlusTreeInternalPage *left_bro_node) {
+  MoveTo(0, GetSize(), left_bro_node, left_bro_node->GetSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveTo(int first, int len, BPlusTreeInternalPage *dest, int start) {
+  if(first >= GetSize() || first < 0 || len <= 0 || len > GetSize() || start < 0 || start > dest->GetSize()) {
     throw Exception(ExceptionType::OUT_OF_RANGE, "error start");
   }
-  if(!destination->IsEmpty()) {
-    throw Exception(ExceptionType::EXECUTION, "Cannot move to non-empty leaf node");
-  }
+  assert((start == 0 && first + len == GetSize()) || start == dest->GetSize());
 
-  int n = GetSize();
-  for(int i = 0 ; i + start < n ; ++i) {
-    destination->array_[i] = array_[start + i];
+  // dest腾出[start, start + len)的位置
+  for(int i = dest->GetSize() - 1 ; i >= start ; --i) {
+    // TODO(gukele) std::move？不知道key中是否存在移动高效的类型
+    dest->array_[i + len] = dest->array_[i];
   }
-  SetSize(start);
-  destination->SetSize(n - start);
+  // [first, first + len）元素移动到dest的[start, start + len)
+  for(int i = 0 ; i < len ; ++i) {
+    dest->array_[start + i] = array_[first + i];
+  }
+  dest->IncreaseSize(len);
+
+  // [first + len, GetSize())的元素向前移动len位置
+  for(int i = 0 ; i < GetSize() - first - len ; ++i) {
+    array_[first + i] = array_[first + len + i];
+  }
+  IncreaseSize(-len);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::DeleteAt(int index) {
+  for (int i = index + 1; i < GetSize(); ++i) {
+    array_[i - 1] = array_[i];
+  }
+  IncreaseSize(-1);
 }
 
 // INDEX_TEMPLATE_ARGUMENTS

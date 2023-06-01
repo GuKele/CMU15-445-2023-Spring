@@ -29,7 +29,7 @@ auto BasicPageGuard::operator=(BasicPageGuard &&other) noexcept -> BasicPageGuar
 }
 
 void BasicPageGuard::Drop() {
-  if (page_ != nullptr) {
+  if (IsVaild()) {
     bpm_->UnpinPage(page_->GetPageId(), is_dirty_);
     ClearAllContents();
   }
@@ -56,7 +56,7 @@ auto ReadPageGuard::operator=(ReadPageGuard &&that) noexcept -> ReadPageGuard & 
 };
 
 void ReadPageGuard::Drop() {
-  if (guard_.page_ != nullptr) {
+  if (IsVaild()) {
     guard_.page_->RUnlatch();
     guard_.Drop();
   }
@@ -75,7 +75,7 @@ auto WritePageGuard::operator=(WritePageGuard &&that) noexcept -> WritePageGuard
 }
 
 void WritePageGuard::Drop() {
-  if (guard_.page_ != nullptr) {
+  if (IsVaild()) {
     guard_.page_->WUnlatch();
     guard_.Drop();
   }

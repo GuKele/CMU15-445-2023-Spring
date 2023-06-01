@@ -55,6 +55,9 @@ class Context {
   // Store the write guards of the pages that you're modifying here.
   std::deque<WritePageGuard> write_set_;
 
+  // 存放write guards和自己在父亲中的index,方便找自己的同父亲兄弟(少一次在父亲中二分查找，避免重复计算)
+  std::deque<std::pair<WritePageGuard, int>> write_guard_and_index_set_;
+
   // You may want to use this when getting value, but not necessary.
   std::deque<ReadPageGuard> read_set_;
 
@@ -122,17 +125,17 @@ class BPlusTree {
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name, Transaction *txn = nullptr);
 
-  enum class Options {
-    INSERT = 0,
-    DELETE
-  };
+  // enum class Options {
+  //   INSERT = 0,
+  //   DELETE
+  // };
 
  private:
+  /*****************************************************************************
+  * SEARCH
+  *****************************************************************************/
 
-  // auto GetRootPageId(Options opt, Context *ctx = nullptr) const -> page_id_t;
-  // auto GetRootPageId(Options opt, Context *ctx = nullptr) const -> page_id_t;
   auto GetRootPageIdForRead(Context *ctx = nullptr) const -> page_id_t;
-  auto GetRootPageIdForInsert(Context *ctx) -> page_id_t;
 
   /**
    * @brief 找到key-value可能存在的叶子节点
@@ -143,6 +146,12 @@ class BPlusTree {
    * @return nullptr表示树空
    */
   auto FindLeafForRead(const KeyType &key, Context* context) -> const LeafPage *;
+
+  /*****************************************************************************
+   * INSERTION
+   *****************************************************************************/
+
+  auto GetRootPageIdForInsertOrDelete(Context *ctx) -> page_id_t;
 
   /**
    * @brief 为了插入或删除，找到叶子节点。
@@ -158,9 +167,9 @@ class BPlusTree {
   /**
    * @brief
    *
-   * @param leaf_node
-   * @param key
-   * @return LeafPage*
+   * @param leaf_node leaf node to be split
+   * @return the pointer of right brother leaf node that split off
+   * @return nullptr for cannot allocate new page
    */
   auto SplitLeaf(LeafPage *leaf_node) -> LeafPage *;
 
@@ -226,10 +235,21 @@ class BPlusTree {
    *  | pid1(-∞,3)   pid2[3,7)   pid3[5,7) |   | pid1[7,9)    pid2[9,+∞) |          |        |
    *  --------------------------------------   ---------------------------          ----------
    *
-   * @param i_node 要分裂的internnal node
+   * @param i_node internnal node to be split
    * @return 返回新internal节点的key和page_id用于插入父亲节点。如果分配新page失败，返回INVALID_PAGE_ID
    */
   auto InsertAndSplitInternal(InternalPage *i_node, const KeyType &key, const page_id_t &value) -> std::pair<KeyType, page_id_t>;
+
+  /*****************************************************************************
+   * REMOVE
+   *****************************************************************************/
+
+  /**
+   * @brief delete element at index of parent internal node
+   *
+   * @param index
+   */
+  void DeleteFromParent(int index, Context *context);
 
   /* Debug Routines for FREE!! */
   void ToGraph(page_id_t page_id, const BPlusTreePage *page,

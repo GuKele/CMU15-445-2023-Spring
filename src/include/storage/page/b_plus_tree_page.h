@@ -45,6 +45,7 @@ class BPlusTreePage {
   BPlusTreePage(const BPlusTreePage &other) = delete;
   ~BPlusTreePage() = delete;
 
+  // TODO(gukele) inline?
   auto IsLeafPage() const -> bool;
   void SetPageType(IndexPageType page_type);
 
@@ -57,8 +58,10 @@ class BPlusTreePage {
   auto GetMinSize() const -> int;
   auto IsFull() const -> bool;
   auto IsEmpty() const -> bool;
+  auto IsSafe() const -> bool;
+
   /**
-   * @brief 检查插入一个k-v后是否安全，安全即不需要分裂
+   * @brief 检查如果一定插入或删除一个k-v后是否安全，安全即不需要分裂
    *
    * @return true
    */

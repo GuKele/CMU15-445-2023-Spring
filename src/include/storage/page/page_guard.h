@@ -67,9 +67,9 @@ class BasicPageGuard {
    * @brief 判读guard是否是一个有效的guard
    *
    */
-  auto IsValiad() -> bool { return page_ != nullptr; }
+  auto IsVaild() const -> bool { return page_ != nullptr; }
 
-  auto PageId() -> page_id_t { return page_->GetPageId(); }
+  auto PageId() const -> page_id_t { return page_->GetPageId(); }
 
   auto GetData() -> const char * { return page_->GetData(); }
 
@@ -88,7 +88,7 @@ class BasicPageGuard {
     return reinterpret_cast<T *>(GetDataMut());
   }
 
- protected:
+ private:
   // inline关键字必须在定义处存在，并且inline函数的定义要放在头文件
   // 干脆直接定义在class中,也不需要inline关键字了，但是还是带上吧
   inline void ClearAllContents() {
@@ -155,6 +155,8 @@ class ReadPageGuard {
    * as if you were dropping the guard.
    */
   ~ReadPageGuard();
+
+  auto IsVaild() const -> bool { return guard_.IsVaild(); }
 
   auto PageId() -> page_id_t { return guard_.PageId(); }
 
@@ -223,6 +225,8 @@ class WritePageGuard {
    * as if you were dropping the guard.
    */
   ~WritePageGuard();
+
+  auto IsVaild() const -> bool { return guard_.IsVaild(); }
 
   auto PageId() -> page_id_t { return guard_.PageId(); }
 
