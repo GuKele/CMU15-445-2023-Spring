@@ -58,15 +58,13 @@ class Exception : public std::runtime_error {
    * @param message The exception message
    */
   explicit Exception(const std::string &message, bool print = true)
-    : std::runtime_error(message),
-      type_(ExceptionType::INVALID)
-  {
-    #ifndef NDEBUG
+      : std::runtime_error(message), type_(ExceptionType::INVALID) {
+#ifndef NDEBUG
     if (print) {
       std::string exception_message = "Message :: " + message + "\n";
       std::cerr << exception_message;
     }
-    #endif
+#endif
   }
 
   /**
@@ -75,16 +73,14 @@ class Exception : public std::runtime_error {
    * @param message The exception message
    */
   Exception(ExceptionType exception_type, const std::string &message, bool print = true)
-    : std::runtime_error(message),
-      type_(exception_type)
-  {
-    #ifndef NDEBUG
+      : std::runtime_error(message), type_(exception_type) {
+#ifndef NDEBUG
     if (print) {
       std::string exception_message =
           "\nException Type :: " + ExceptionTypeToString(type_) + "\nMessage :: " + message + "\n";
       std::cerr << exception_message;
     }
-    #endif
+#endif
   }
 
   /** @return The type of the exception */

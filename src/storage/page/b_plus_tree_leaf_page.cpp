@@ -15,6 +15,7 @@
 
 #include "common/config.h"
 #include "common/exception.h"
+#include "common/macros.h"
 #include "common/rid.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/b_plus_tree_page.h"
@@ -34,6 +35,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(int max_size) {
   SetPageType(IndexPageType::LEAF_PAGE);
   SetSize(0);
   SetMaxSize(max_size);
+  SetNextPageId(INVALID_PAGE_ID);
 }
 
 /**
@@ -41,7 +43,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(int max_size) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const -> page_id_t {
-  if(next_page_id_ != INVALID_PAGE_ID) {
+  if (next_page_id_ != INVALID_PAGE_ID) {
     return next_page_id_;
   }
   return INVALID_PAGE_ID;
@@ -76,8 +78,12 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueOfKey(const KeyType &key, ValueType *val, const KeyComparator &comparator) const -> bool {
-  if(int index ; IndexOfKey(key, comparator, &index)) {
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::operator[](int index) const -> const MappingType & { return array_[index]; }
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueOfKey(const KeyType &key, ValueType *val, const KeyComparator &comparator) const
+    -> bool {
+  if (int index; IndexOfKey(key, comparator, &index)) {
     *val = ValueAt(index);
     return true;
   }
@@ -85,11 +91,9 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueOfKey(const KeyType &key, ValueType *val, 
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::IndexOfKey(const KeyType &key, const KeyComparator &comparator, int *index) const -> bool
- {
-  auto cmp = [&comparator](const MappingType &lhs, const KeyType &rhs) {
-    return comparator(lhs.first, rhs) < 0;
-  };
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::IndexOfKey(const KeyType &key, const KeyComparator &comparator, int *index) const
+    -> bool {
+  auto cmp = [&comparator](const MappingType &lhs, const KeyType &rhs) { return comparator(lhs.first, rhs) < 0; };
 
   auto it = std::lower_bound(array_, array_ + GetSize(), key, cmp);
 
@@ -102,7 +106,7 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::IndexOfKey(const KeyType &key, const KeyCompara
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::PopBack() {
-  if(!IsEmpty()) {
+  if (!IsEmpty()) {
     IncreaseSize(-1);
   }
 }
@@ -113,7 +117,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::PopFront() {
   if (!IsEmpty()) {
     IncreaseSize(-1);
   }
-  for(int i = 1 ; i < n ; ++i) {
+  for (int i = 1; i < n; ++i) {
     array_[i - 1] = array_[i];
   }
 }
@@ -129,7 +133,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::PushFront(const MappingType &val) {
   assert(!IsFull());
   int n = GetSize();
-  for(int i = n ; i > 0 ; --i) {
+  for (int i = n; i > 0; --i) {
     array_[i] = array_[i - 1];
   }
   array_[0] = val;
@@ -137,7 +141,8 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::PushFront(const MappingType &val) {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val, const KeyComparator& comparator) -> bool {
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val, const KeyComparator &comparator)
+    -> bool {
   int n = GetSize();
 
   if (n >= GetMaxSize()) {
@@ -188,28 +193,30 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Split(BPlusTreeLeafPage *new_right_bro_node, pa
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MergeToLeftBro(BPlusTreeLeafPage *left_bro_node) {
   MoveTo(0, GetSize(), left_bro_node, left_bro_node->GetSize());
+  left_bro_node->SetNextPageId(GetNextPageId());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveTo(int first, int len, BPlusTreeLeafPage *dest, int start) {
-  if(first >= GetSize() || first < 0 || len <= 0 || len > GetSize() || start < 0 || start > dest->GetSize()) {
-    throw Exception(ExceptionType::OUT_OF_RANGE, "error start");
-  }
+  // 也可能会出现len = 0的情况，所以没必要在这里判断
+  // if (first >= GetSize() || first < 0 || len <= 0 || len > GetSize() || start < 0 || start > dest->GetSize()) {
+  //   throw Exception(ExceptionType::OUT_OF_RANGE, "error start");
+  // }
   assert((start == 0 && first + len == GetSize()) || start == dest->GetSize());
 
   // dest腾出[start, start + len)的位置
-  for(int i = dest->GetSize() - 1 ; i >= start ; --i) {
+  for (int i = dest->GetSize() - 1; i >= start; --i) {
     // TODO(gukele) std::move？不知道key中是否存在移动高效的类型
     dest->array_[i + len] = dest->array_[i];
   }
   // [first, first + len）元素移动到dest的[start, start + len)
-  for(int i = 0 ; i < len ; ++i) {
+  for (int i = 0; i < len; ++i) {
     dest->array_[start + i] = array_[first + i];
   }
   dest->IncreaseSize(len);
 
   // [first + len, GetSize())的元素向前移动len位置
-  for(int i = 0 ; i < GetSize() - first - len ; ++i) {
+  for (int i = 0; i < GetSize() - first - len; ++i) {
     array_[first + i] = array_[first + len + i];
   }
   IncreaseSize(-len);
@@ -217,7 +224,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveTo(int first, int len, BPlusTreeLeafPage *d
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Delete(const KeyType &key, const KeyComparator &comparator) -> bool {
-  if(int index; IndexOfKey(key, comparator, &index)) {
+  if (int index; IndexOfKey(key, comparator, &index)) {
     DeleteAt(index);
     return true;
   }
@@ -226,12 +233,11 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Delete(const KeyType &key, const KeyComparator 
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::DeleteAt(int index) {
-  for(int i = index + 1; i < GetSize() ; ++i) {
+  for (int i = index + 1; i < GetSize(); ++i) {
     array_[i - 1] = array_[i];
   }
   IncreaseSize(-1);
 }
-
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
 template class BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>>;

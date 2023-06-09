@@ -17,6 +17,7 @@
 #include <queue>
 #include <shared_mutex>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -132,8 +133,8 @@ class BPlusTree {
 
  private:
   /*****************************************************************************
-  * SEARCH
-  *****************************************************************************/
+   * SEARCH
+   *****************************************************************************/
 
   auto GetRootPageIdForRead(Context *ctx = nullptr) const -> page_id_t;
 
@@ -145,7 +146,9 @@ class BPlusTree {
    * @param context
    * @return nullptr表示树空
    */
-  auto FindLeafForRead(const KeyType &key, Context* context) -> const LeafPage *;
+  auto FindLeafForRead(const KeyType &key, Context *context) const -> const LeafPage *;
+
+  auto FindLeftMostLeaf(Context *context) const -> const LeafPage *;
 
   /*****************************************************************************
    * INSERTION
@@ -188,7 +191,8 @@ class BPlusTree {
    *        3.如果父亲节点存在并且没有满，直接插入就可以了
    * @param key 右兄弟对应的key
    * @param value 右兄弟的page_id
-   * @param context write_set_最后一个元素是孩子节点(left_page_guard),倒数第二个(如果有，即这个孩子不是root)是被插入的父亲page
+   * @param context
+   * write_set_最后一个元素是孩子节点(left_page_guard),倒数第二个(如果有，即这个孩子不是root)是被插入的父亲page
    * @return true
    * @return false
    */
@@ -236,9 +240,11 @@ class BPlusTree {
    *  --------------------------------------   ---------------------------          ----------
    *
    * @param i_node internnal node to be split
+   * @param index key-pageid 插入后所应该在的下标
    * @return 返回新internal节点的key和page_id用于插入父亲节点。如果分配新page失败，返回INVALID_PAGE_ID
    */
-  auto InsertAndSplitInternal(InternalPage *i_node, const KeyType &key, const page_id_t &value) -> std::pair<KeyType, page_id_t>;
+  auto InsertAndSplitInternal(InternalPage *i_node, const KeyType &key, const page_id_t &value, int index)
+      -> std::pair<KeyType, page_id_t>;
 
   /*****************************************************************************
    * REMOVE
@@ -252,24 +258,24 @@ class BPlusTree {
   void DeleteFromParent(int index, Context *context);
 
   /* Debug Routines for FREE!! */
-  void ToGraph(page_id_t page_id, const BPlusTreePage *page,
-              std::ofstream &out);
+  void ToGraph(page_id_t page_id, const BPlusTreePage *page, std::ofstream &out);
 
   void PrintTree(page_id_t page_id, const BPlusTreePage *page);
 
   /**
-  * @brief Convert A B+ tree into a Printable B+ tree
-  *
-  * @param root_id
-  * @return PrintableNode
-  */
+   * @brief Convert A B+ tree into a Printable B+ tree
+   *
+   * @param root_id
+   * @return PrintableNode
+   */
   auto ToPrintableBPlusTree(page_id_t root_id) -> PrintableBPlusTree;
 
+ private:
   // member variable
   std::string index_name_;
   BufferPoolManager *bpm_;
   KeyComparator comparator_;
-  std::vector<std::string> log; // NOLINT
+  std::vector<std::string> log;  // NOLINT
   int leaf_max_size_;
   int internal_max_size_;
   page_id_t header_page_id_;

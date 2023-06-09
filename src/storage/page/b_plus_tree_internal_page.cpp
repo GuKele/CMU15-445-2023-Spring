@@ -80,7 +80,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &valu
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
-  if(index < 0 || index >= GetSize()) {
+  if (index < 0 || index >= GetSize()) {
     return INVALID_PAGE_ID;
   }
   return array_[index].second;
@@ -88,7 +88,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopBack() {
-  if(!IsEmpty()) {
+  if (!IsEmpty()) {
     IncreaseSize(-1);
   }
 }
@@ -141,7 +141,8 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PushFrontValue(const ValueType &val) {
 // }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyComparator& comparator, int *index) const -> ValueType {
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyComparator &comparator, int *index) const
+    -> ValueType {
   auto cmp = [&comparator](const MappingType &lhs, const MappingType &rhs) {
     return comparator(lhs.first, rhs.first) < 0;
   };
@@ -153,14 +154,15 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyCompara
   //   return Back().second;
   // }
 
-  if(index != nullptr) {
-    *index = it - 1 - array_;
+  if (index != nullptr) {
+    *index = it - array_ - 1;
   }
   return (it - 1)->second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator& comparator) {
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value,
+                                            const KeyComparator &comparator) {
   int index = -1;
   Search(key, comparator, &index);
   ++index;
@@ -200,24 +202,24 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MergeToLeftBro(BPlusTreeInternalPage *left_
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveTo(int first, int len, BPlusTreeInternalPage *dest, int start) {
-  if(first >= GetSize() || first < 0 || len <= 0 || len > GetSize() || start < 0 || start > dest->GetSize()) {
+  if (first >= GetSize() || first < 0 || len <= 0 || len > GetSize() || start < 0 || start > dest->GetSize()) {
     throw Exception(ExceptionType::OUT_OF_RANGE, "error start");
   }
   assert((start == 0 && first + len == GetSize()) || start == dest->GetSize());
 
   // dest腾出[start, start + len)的位置
-  for(int i = dest->GetSize() - 1 ; i >= start ; --i) {
+  for (int i = dest->GetSize() - 1; i >= start; --i) {
     // TODO(gukele) std::move？不知道key中是否存在移动高效的类型
     dest->array_[i + len] = dest->array_[i];
   }
   // [first, first + len）元素移动到dest的[start, start + len)
-  for(int i = 0 ; i < len ; ++i) {
+  for (int i = 0; i < len; ++i) {
     dest->array_[start + i] = array_[first + i];
   }
   dest->IncreaseSize(len);
 
   // [first + len, GetSize())的元素向前移动len位置
-  for(int i = 0 ; i < GetSize() - first - len ; ++i) {
+  for (int i = 0; i < GetSize() - first - len; ++i) {
     array_[first + i] = array_[first + len + i];
   }
   IncreaseSize(-len);
@@ -232,7 +234,8 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::DeleteAt(int index) {
 }
 
 // INDEX_TEMPLATE_ARGUMENTS
-// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) {
+// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator
+// &comparator) {
 //   for(int i = GetSize() - 1 ; i >= 0 ; --i) {
 //     if(comparator(KeyAt(i), key) < 0) {
 //       array_[i + 1] = {key, value};

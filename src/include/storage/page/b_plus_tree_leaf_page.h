@@ -21,7 +21,7 @@
 namespace bustub {
 
 #define B_PLUS_TREE_LEAF_PAGE_TYPE BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>
-#define LEAF_PAGE_HEADER_SIZE 16
+#define LEAF_PAGE_HEADER_SIZE 16  // why 16 instead of 12
 #define LEAF_PAGE_SIZE ((BUSTUB_PAGE_SIZE - LEAF_PAGE_HEADER_SIZE) / sizeof(MappingType))
 
 /**
@@ -62,6 +62,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto KeyAt(int index) const -> KeyType;
   auto ValueAt(int index) const -> ValueType;
 
+  auto operator[](int index) const -> const MappingType &;
+
   /**
    * @brief 返回key对应的value， 好像还不如自己实现折半查找
    *
@@ -81,12 +83,12 @@ class BPlusTreeLeafPage : public BPlusTreePage {
    */
   auto IndexOfKey(const KeyType &key, const KeyComparator &comparator, int *index = nullptr) const -> bool;
 
-  auto Back() -> MappingType& {
+  auto Back() const -> const MappingType & {
     assert(GetSize() >= 1);
     return array_[GetSize() - 1];
   }
 
-  auto Front()  -> MappingType& {
+  auto Front() const -> const MappingType & {
     assert(GetSize() >= 1);
     return array_[0];
   }
@@ -104,7 +106,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
    * @param comparator
    * @return false 插入重复key会返回失败
    */
-  auto Insert(const KeyType &key, const ValueType &val, const KeyComparator& comparator) -> bool;
+  auto Insert(const KeyType &key, const ValueType &val, const KeyComparator &comparator) -> bool;
 
   /**
    * @brief insert element into array_[index],
@@ -124,12 +126,12 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void DeleteAt(int index);
 
   /**
-    * @brief for test only return a string representing all keys in
-    * this leaf page formatted as "(key1,key2,key3,...)"
-    *
-    * @return std::string
-    */
-  auto ToString() const->std::string {
+   * @brief for test only return a string representing all keys in
+   * this leaf page formatted as "(key1,key2,key3,...)"
+   *
+   * @return std::string
+   */
+  auto ToString() const -> std::string {
     std::string kstr = "(";
     bool first = true;
 
@@ -150,18 +152,20 @@ class BPlusTreeLeafPage : public BPlusTreePage {
 
  private:
   /**
-    * @brief 移动下标[first, first + len)的键值对到dest的[start, start + len)，同时dest原来[start, end)的向后移
-    * 只用于自己尾部元素移动到右兄弟顶端、自己首部元素移动到左兄弟尾端，保证移动后键值对有序。
-    * like call len times of {dest->PushFront(Back()); PopBack();} or {dest->PushBack(Front()); PopFront();}
-    * @param first
-    * @param len
-    * @param destination 目的节点
-    * @param start 目的节点的开始下标
-    */
+   * @brief 移动下标[first, first + len)的键值对到dest的[start, start + len)，同时dest原来[start, end)的向后移
+   * 只用于自己尾部元素移动到右兄弟顶端、自己首部元素移动到左兄弟尾端，保证移动后键值对有序。
+   * like call len times of {dest->PushFront(Back()); PopBack();} or {dest->PushBack(Front()); PopFront();}
+   * @param first
+   * @param len
+   * @param destination 目的节点
+   * @param start 目的节点的开始下标
+   */
   void MoveTo(int first, int len, BPlusTreeLeafPage *dest, int start);
 
  private:
-  page_id_t next_page_id_ = INVALID_PAGE_ID;
+  page_id_t next_page_id_;
+  // FIXME(gukele) 类内初始值没用，压根没有构造函数，都是reinterpret_cast过来然后init()
+  // page_id_t next_page_id_ = INVALID_PAGE_ID;
   // Flexible array member for page data.
   MappingType array_[0];
 };

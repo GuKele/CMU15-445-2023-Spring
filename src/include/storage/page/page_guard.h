@@ -158,7 +158,7 @@ class ReadPageGuard {
 
   auto IsVaild() const -> bool { return guard_.IsVaild(); }
 
-  auto PageId() -> page_id_t { return guard_.PageId(); }
+  auto PageId() const -> page_id_t { return guard_.PageId(); }
 
   // 读guard只有这个，而没有GetDataMut()
   auto GetData() -> const char * { return guard_.GetData(); }

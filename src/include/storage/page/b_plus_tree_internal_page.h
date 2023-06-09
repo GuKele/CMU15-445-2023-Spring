@@ -78,12 +78,12 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    */
   auto ValueAt(int index) const -> ValueType;
 
-  auto FrontValue() -> ValueType & {
+  auto FrontValue() const -> const ValueType & {
     assert(GetSize() >= 1);
     return array_[0].second;
   }
 
-  auto Back() -> MappingType & {
+  auto Back() const -> const MappingType & {
     assert(GetSize() >= 1);
     return array_[GetSize() - 1];
   }
@@ -110,7 +110,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    * @param index 返回key对应的下标(刚好比key小或者等于key的下标)
    * @return ValueType
    */
-  auto Search(const KeyType &key, const KeyComparator& comparator, int *index = nullptr) const -> ValueType;
+  auto Search(const KeyType &key, const KeyComparator &comparator, int *index = nullptr) const -> ValueType;
 
   // /**
   //  * @brief 插入key-value(page_id)，保证插入前不满。
@@ -142,14 +142,14 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void MergeToLeftBro(BPlusTreeInternalPage *left_bro_node);
 
   /**
-    * @brief 移动下标[first, first + len)的键值对到dest的[start, start + len)，同时dest原来[start, end)的向后移
-    * 只用于自己尾部元素移动到右兄弟顶端、自己首部元素移动到左兄弟尾端，保证移动后键值对有序。
-    * like call len times of {dest->PushFront(Back()); PopBack();} or {dest->PushBack(Front()); PopFront();}
-    * @param first
-    * @param len
-    * @param destination 目的节点
-    * @param start 目的节点的开始下标
-    */
+   * @brief 移动下标[first, first + len)的键值对到dest的[start, start + len)，同时dest原来[start, end)的向后移
+   * 只用于自己尾部元素移动到右兄弟顶端、自己首部元素移动到左兄弟尾端，保证移动后键值对有序。
+   * like call len times of {dest->PushFront(Back()); PopBack();} or {dest->PushBack(Front()); PopFront();}
+   * @param first
+   * @param len
+   * @param destination 目的节点
+   * @param start 目的节点的开始下标
+   */
   void MoveTo(int first, int len, BPlusTreeInternalPage *dest, int start);
 
   void DeleteAt(int index);

@@ -40,10 +40,10 @@ void BPlusTreePage::SetMaxSize(int max_size) { max_size_ = max_size; }
  */
 // TODO(gukele) generally!!!!!
 auto BPlusTreePage::GetMinSize() const -> int {
-  if(IsLeafPage()) {
+  if (IsLeafPage()) {
     return max_size_ / 2;
   }
-  if(page_type_ == IndexPageType::INTERNAL_PAGE) {
+  if (page_type_ == IndexPageType::INTERNAL_PAGE) {
     return (max_size_ + 1) / 2;
   }
   return -1;
@@ -51,29 +51,25 @@ auto BPlusTreePage::GetMinSize() const -> int {
   // return max_size_ / 2;
 }
 
-auto BPlusTreePage::IsFull() const -> bool {
-  return GetSize() == GetMaxSize();
-}
+auto BPlusTreePage::IsFull() const -> bool { return GetSize() == GetMaxSize(); }
 
 auto BPlusTreePage::IsEmpty() const -> bool {
-  if(IsLeafPage()) {
+  if (IsLeafPage()) {
     return GetSize() == 0;
   }
   // internal node没key的时候，只有第一个val,就为空
   return GetSize() == 1;
 }
 
-auto BPlusTreePage::IsSafe() const -> bool {
-  return GetSize() >= GetMinSize();
-}
+auto BPlusTreePage::IsSafe() const -> bool { return GetSize() >= GetMinSize(); }
 
 auto BPlusTreePage::IsSafeAfterOption(BPlusTreeOption opt) const -> bool {
   // INSERT
-  if(opt == BPlusTreeOption::INSERT) {
-    if (IsLeafPage()) { // 叶子节点是插入后满则分裂，所以插入后不达到GetMaxSize就是安全
+  if (opt == BPlusTreeOption::INSERT) {
+    if (IsLeafPage()) {  // 叶子节点是插入后满则分裂，所以插入后不达到GetMaxSize就是安全
       return GetSize() + 1 < GetMaxSize();
     }
-    return !IsFull(); // 非叶子节点是插入前满则分裂
+    return !IsFull();  // 非叶子节点是插入前满则分裂
   }
 
   // DELETE

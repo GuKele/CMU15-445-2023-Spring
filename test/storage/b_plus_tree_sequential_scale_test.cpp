@@ -48,6 +48,7 @@ TEST(BPlusTreeTests, ScaleTest) {  // NOLINT
   auto *transaction = new Transaction(0);
 
   int64_t scale = 5000;
+
   std::vector<int64_t> keys;
   for (int64_t key = 1; key < scale; key++) {
     keys.push_back(key);
@@ -59,13 +60,12 @@ TEST(BPlusTreeTests, ScaleTest) {  // NOLINT
   int count = 0;
   for (auto key : keys) {
     ++count;
-    if(count == 100) {
-      std::cout << "test" << std::endl;
-    }
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
+    // tree.Draw(bpm, "./tree.txt");
+    // tree.Print(bpm);
   }
   std::vector<RID> rids;
   for (auto key : keys) {

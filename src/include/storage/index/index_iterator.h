@@ -13,7 +13,11 @@
  * For range scan of b+ tree
  */
 #pragma once
+#include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
+#include "storage/page/page_guard.h"
 
 namespace bustub {
 
@@ -21,10 +25,21 @@ namespace bustub {
 
 INDEX_TEMPLATE_ARGUMENTS
 class IndexIterator {
+  using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
+
  public:
   // you may define your own constructor based on your member variables
+  // default ctor create end iterator
   IndexIterator();
   ~IndexIterator();  // NOLINT
+
+  IndexIterator(ReadPageGuard &&guard, BufferPoolManager *bpm, int index);
+
+  IndexIterator(const IndexIterator &that);
+  auto operator=(const IndexIterator &that) -> IndexIterator &;
+
+  IndexIterator(IndexIterator &&that) noexcept;
+  auto operator=(IndexIterator &&that) noexcept -> IndexIterator &;
 
   auto IsEnd() -> bool;
 
@@ -32,12 +47,23 @@ class IndexIterator {
 
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator==(const IndexIterator &itr) const -> bool {
+    // throw std::runtime_error("unimplemented");
+    return (index_ == itr.index_ && leaf_node_ == itr.leaf_node_);
+  }
 
-  auto operator!=(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator!=(const IndexIterator &itr) const -> bool {
+    // throw std::runtime_error("unimplemented");
+    return !(*this == itr);
+  }
 
  private:
   // add your own private member variables here
+  int index_{-1};
+  const LeafPage *leaf_node_{nullptr};
+  // TODO(gukele) WritePageGuard?
+  BufferPoolManager *bpm_;
+  ReadPageGuard guard_;
 };
 
 }  // namespace bustub
