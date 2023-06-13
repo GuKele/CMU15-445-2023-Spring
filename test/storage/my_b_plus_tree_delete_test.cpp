@@ -190,8 +190,7 @@ TEST(BPlusTreeTests, DeleteTest2) {
   (void)header_page;
 
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree(
-      "foo_pk", page_id, bpm, comparator, 3, 3);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", page_id, bpm, comparator, 3, 3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -281,8 +280,7 @@ TEST(BPlusTreeTests, ScaleTest) {
   (void)header_page;
 
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree(
-      "foo_pk", page_id, bpm, comparator, 3, 3);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", page_id, bpm, comparator, 3, 3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -371,8 +369,7 @@ TEST(BPlusTreeTests, SequentialMixTest) {
   (void)header_page;
 
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree(
-      "foo_pk", page_id, bpm, comparator, 3, 3);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", page_id, bpm, comparator, 3, 3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -381,7 +378,7 @@ TEST(BPlusTreeTests, SequentialMixTest) {
   // first, populate index
   std::vector<int64_t> for_insert;
   std::vector<int64_t> for_delete;
-  size_t sieve = 2; // divide evenly
+  size_t sieve = 2;  // divide evenly
   size_t total_keys = 1000;
   for (size_t i = 1; i <= total_keys; i++) {
     if (i % sieve == 0) {

@@ -131,6 +131,9 @@ class Column {
   TypeId column_type_;
 
   /** For a non-inlined column, this is the size of a pointer. Otherwise, the size of the fixed length column. */
+  // 除了 VARCHAR UnInlined ，其余类型均为 Inlined 类型。
+  // inlined的fixed_length就是其所需size,而non-inlined的类型fixed_length为一个指针大小。
+  // 在Tuple中分为fixed-field(存放inline类型的值、非inline类型的偏移)和VARIED-SIZED FIELD(存放non-inlined类型的值)
   uint32_t fixed_length_;
 
   /** For an inlined column, 0. Otherwise, the length of the variable length column. */

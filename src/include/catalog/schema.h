@@ -101,6 +101,7 @@ class Schema {
 
  private:
   /** Fixed-length column size, i.e. the number of bytes used by one tuple. */
+  // 所有colum使用的固定长度
   uint32_t length_;
 
   /** All the columns in the schema, inlined and uninlined. */

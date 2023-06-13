@@ -61,8 +61,8 @@ class IndexIterator {
   // add your own private member variables here
   int index_{-1};
   const LeafPage *leaf_node_{nullptr};
-  // TODO(gukele) WritePageGuard?
   BufferPoolManager *bpm_;
+  // TODO(gukele) should the itetator hold PageGuard？
   ReadPageGuard guard_;
 };
 

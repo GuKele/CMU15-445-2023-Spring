@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <memory>
 #include "execution/executor_context.h"
 #include "storage/table/tuple.h"
 

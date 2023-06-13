@@ -28,7 +28,7 @@ select count(distance), sum(distance) from (
             left_graph.src_label as src_label,
             right_graph.dst_label as dst_label,
             (left_graph.distance + right_graph.distance) as distance
-        from 
+        from
             graph left_graph inner join graph right_graph
             on left_graph.dst = right_graph.src
     ) group by src, dst, src_label, dst_label
@@ -47,7 +47,7 @@ select count(distance), sum(distance) from (
             right_graph.dst as dst,
             left_graph.src_label as src_label,
             right_graph.dst_label as dst_label,
-            (left_graph.distance + right_graph.distance) as distance 
+            (left_graph.distance + right_graph.distance) as distance
         from (
             -- find shortest path within 1 neighbor
             select src, dst, src_label, dst_label, min(distance) as distance from (
@@ -58,7 +58,7 @@ select count(distance), sum(distance) from (
                     left_graph.src_label as src_label,
                     right_graph.dst_label as dst_label,
                     (left_graph.distance + right_graph.distance) as distance
-                from 
+                from
                     graph left_graph inner join graph right_graph
                     on left_graph.dst = right_graph.src
             ) group by src, dst, src_label, dst_label
@@ -79,7 +79,7 @@ select count(distance), sum(distance) from (
             right_graph.dst as dst,
             left_graph.src_label as src_label,
             right_graph.dst_label as dst_label,
-            (left_graph.distance + right_graph.distance) as distance 
+            (left_graph.distance + right_graph.distance) as distance
         from (
             -- find shortest path within 2 neighbors
             select src, dst, src_label, dst_label, min(distance) as distance from (
@@ -89,7 +89,7 @@ select count(distance), sum(distance) from (
                     right_graph.dst as dst,
                     left_graph.src_label as src_label,
                     right_graph.dst_label as dst_label,
-                    (left_graph.distance + right_graph.distance) as distance 
+                    (left_graph.distance + right_graph.distance) as distance
                 from (
                     -- find shortest path within 1 neighbor
                     select src, dst, src_label, dst_label, min(distance) as distance from (
@@ -100,7 +100,7 @@ select count(distance), sum(distance) from (
                             left_graph.src_label as src_label,
                             right_graph.dst_label as dst_label,
                             (left_graph.distance + right_graph.distance) as distance
-                        from 
+                        from
                             graph left_graph inner join graph right_graph
                             on left_graph.dst = right_graph.src
                     ) group by src, dst, src_label, dst_label
@@ -121,7 +121,7 @@ select * from (
             right_graph.dst as dst,
             left_graph.src_label as src_label,
             right_graph.dst_label as dst_label,
-            (left_graph.distance + right_graph.distance) as distance 
+            (left_graph.distance + right_graph.distance) as distance
         from (
             -- find shortest path within 2 neighbors
             select src, dst, src_label, dst_label, min(distance) as distance from (
@@ -131,7 +131,7 @@ select * from (
                     right_graph.dst as dst,
                     left_graph.src_label as src_label,
                     right_graph.dst_label as dst_label,
-                    (left_graph.distance + right_graph.distance) as distance 
+                    (left_graph.distance + right_graph.distance) as distance
                 from (
                     -- find shortest path within 1 neighbor
                     select src, dst, src_label, dst_label, min(distance) as distance from (
@@ -142,7 +142,7 @@ select * from (
                             left_graph.src_label as src_label,
                             right_graph.dst_label as dst_label,
                             (left_graph.distance + right_graph.distance) as distance
-                        from 
+                        from
                             graph left_graph inner join graph right_graph
                             on left_graph.dst = right_graph.src
                     ) group by src, dst, src_label, dst_label
@@ -152,15 +152,15 @@ select * from (
     ) group by src, dst, src_label, dst_label
 ) where src = 0 order by dst limit 10;
 ----
-0 0 000 000 4 
-0 1 000 001 4 
-0 2 000 002 4 
-0 3 000 003 4 
-0 4 000 004 4 
-0 5 000 005 4 
-0 6 000 006 4 
-0 7 000 007 4 
-0 8 000 008 4 
+0 0 000 000 4
+0 1 000 001 4
+0 2 000 002 4
+0 3 000 003 4
+0 4 000 004 4
+0 5 000 005 4
+0 6 000 006 4
+0 7 000 007 4
+0 8 000 008 4
 0 9 000 009 4
 
 # In the future, we will construct some custom graphs with different link weight.
