@@ -29,6 +29,18 @@
 namespace bustub {
 
 /**
+ * Two-phase Locking 两阶段锁协议
+ * 1、增长阶段（growing phase）：事务可以获得锁，但不能释放锁。
+ * 2、缩减阶段（shrinking phase）：事务可以释放锁，但不能获得新锁。
+ * 可以证明，若并发执行的所有事务均遵守两段锁协议(充分条件)，则对这些事务的任何并发调度策略都是可串行化的。
+ *
+ * Strict Two-phase Locking 严格两阶段锁: commit后才释放所有的排他锁
+ * 两阶段可能会出现脏读(读未提交)、级联abort(第一个事物abort,而第二个事物在第一个事物最终没有commit的基础上脏读，同样需要跟着abort)。
+ * 简单粗暴的解决级联abort的方法就是commit后再释放该事物所有的排他锁
+ *
+ * Strong Strict Two-phase Locking 强两阶段锁: commit后才释放所有锁
+ * 严格两阶段锁可能会出现不可重复读(例如读提交下，shrinking可以拿读锁，那么就可能出现不可重复读)
+ *
  * Transaction states for 2PL:
  *
  *     _________________________
@@ -44,6 +56,19 @@ namespace bustub {
  *
  **/
 enum class TransactionState { GROWING, SHRINKING, COMMITTED, ABORTED };
+
+/**
+ * ACID
+ * Atomicity: all or nothing (undo log)
+ * Consistency: it looks correct to me
+ * Isolation: READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, Serial串行化
+ * Durability: survive failure
+ */
+
+/**
+ *
+ *
+ */
 
 /**
  * Transaction isolation level.
@@ -131,7 +156,8 @@ class TransactionAbortException : public std::exception {
 
  public:
   explicit TransactionAbortException(txn_id_t txn_id, AbortReason abort_reason)
-      : txn_id_(txn_id), abort_reason_(abort_reason) {}
+    : txn_id_(txn_id), abort_reason_(abort_reason)
+  { std::cerr << GetInfo() << std::endl; }
   auto GetTransactionId() -> txn_id_t { return txn_id_; }
   auto GetAbortReason() -> AbortReason { return abort_reason_; }
   auto GetInfo() -> std::string {

@@ -17,6 +17,7 @@
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -65,7 +66,9 @@ class LockManager {
   class LockRequestQueue {
    public:
     /** List of lock requests for the same resource (table or row) */
-    std::list<LockRequest *> request_queue_;
+    // TODO(gukele) 使用智能指针
+    // std::list<LockRequest *> request_queue_;
+    std::list<std::shared_ptr<LockRequest>> request_queue_;
     /** For notifying blocked transactions on this rid */
     std::condition_variable cv_;
     /** txn_id of an upgrading transaction (if any) */
@@ -106,8 +109,7 @@ class LockManager {
    *
    * MULTIPLE TRANSACTIONS:
    *    LockManager should maintain a queue for each resource; locks should be granted to transactions in a FIFO manner.
-   *    If there are multiple compatible lock requests, all should be granted at the same time
-   *    as long as FIFO is honoured.
+   *    If there are multiple compatible lock requests, all should be granted at the same time as long as FIFO is honoured.
    *
    * SUPPORTED LOCK MODES:
    *    Table locking should support all lock modes.
@@ -162,6 +164,8 @@ class LockManager {
    *        S -> [X, SIX]
    *        IX -> [X, SIX]
    *        SIX -> [X]
+   *    总的等级 IS -> S -> SIX -> X
+   *            IS -> IX -> SIX -> X
    *    Any other upgrade is considered incompatible, and such an attempt should set the TransactionState as ABORTED
    *    and throw a TransactionAbortException (INCOMPATIBLE_UPGRADE)
    *
@@ -312,16 +316,109 @@ class LockManager {
  private:
   /** Spring 2023 */
   /* You are allowed to modify all functions below. */
-  auto UpgradeLockTable(Transaction *txn, LockMode lock_mode, const table_oid_t &oid) -> bool;
-  auto UpgradeLockRow(Transaction *txn, LockMode lock_mode, const table_oid_t &oid, const RID &rid) -> bool;
+
+  /**
+   * @brief 检测是否是锁升级事件，若是则升级并返回true
+   *
+   * @param txn
+   * @param lock_mode
+   * @param lock_request_queue
+   * @return -1表示不是锁升级事件，0表示是锁升级事件但锁升级失败，1表示是锁升级事件并且锁升级成功
+   * @return std::optional == std::nullopt表示不是锁升级事件，true表示锁升级成功，false表示锁升级失败
+   */
+  auto UpgradeLockTable(Transaction *txn, LockMode lock_mode, LockRequestQueue *table_lock_request_queue) -> std::optional<bool>;
+
+  /**
+   * @brief
+   *
+   * @param txn
+   * @param lock_mode
+   * @param oid
+   * @param row_lock_request_queue
+   * @return std::optional == std::nullopt表示不是锁升级事件，true表示锁升级成功，false表示锁升级失败
+   */
+  auto UpgradeLockRow(Transaction *txn, LockMode lock_mode, LockRequestQueue *row_lock_request_queue) -> std::optional<bool>;
+
+  /**
+   * @brief 检测两个锁是否兼容
+   *
+   * @param l1
+   * @param l2
+   * @return true
+   */
   auto AreLocksCompatible(LockMode l1, LockMode l2) -> bool;
+
+  /**
+   * @brief 检测不同隔离性、两阶段与锁的兼容性
+   *
+   * @param txn
+   * @param lock_mode
+   * @return true
+   * @return false
+   */
   auto CanTxnTakeLock(Transaction *txn, LockMode lock_mode) -> bool;
+
+  /**
+   * @brief can lock_request in lock_request_queue be granted.
+   * If there are multiple compatible lock requests, all should be granted at
+   * the same time as long as FIFO is honoured.
+   *
+   * @param lock_request_queue
+   * @param lock_request
+   * @return true
+   */
+  auto CanGrantLock(LockRequestQueue *lock_request_queue, LockRequest *lock_request) -> bool;
+
+  // auto CanGrantRowLock(LockRequestQueue *row_lock_request_queue, LockRequest *lock_request) -> bool;
+
   void GrantNewLocksIfPossible(LockRequestQueue *lock_request_queue);
+
+  /**
+   * @brief 检测锁升级的正确性
+   *
+   * @param curr_lock_mode
+   * @param requested_lock_mode
+   * @return true
+   * @return false
+   */
   auto CanLockUpgrade(LockMode curr_lock_mode, LockMode requested_lock_mode) -> bool;
+
+  /**
+   * @brief 加行锁前，检查该事务是否持有对应的表级意向锁
+   *
+   * @param txn
+   * @param oid
+   * @param row_lock_mode
+   * @return true
+   * @return false
+   */
   auto CheckAppropriateLockOnTable(Transaction *txn, const table_oid_t &oid, LockMode row_lock_mode) -> bool;
+
+  auto CheckNotHoldAppropriateLockOnRow(Transaction *txn, const table_oid_t &oid, LockMode table_lock_mode) -> bool;
+
   auto FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, std::unordered_set<txn_id_t> &on_path,
                  std::unordered_set<txn_id_t> &visited, txn_id_t *abort_txn_id) -> bool;
   void UnlockAll();
+
+  /**
+   * @brief 更新txn的table lock set
+   *
+   * @param txn
+   * @param request
+   * @param is_insert insert or delete
+   */
+  void UpdateTxnTableLockSet(Transaction *txn, LockRequest *table_lock_request, bool is_insert);
+
+  /**
+   * @brief 更新txn的row lock set
+   *
+   * @param txn
+   * @param request
+   * @param is_insert insert or delete
+   */
+  void UpdateTxnRowLockSet(Transaction *txn, LockRequest *row_lock_request, bool is_insert);
+
+  auto UpdateTxnState(Transaction *txn, LockMode unlock_mode) -> bool;
 
   /** Structure that holds lock requests for a given table oid */
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
