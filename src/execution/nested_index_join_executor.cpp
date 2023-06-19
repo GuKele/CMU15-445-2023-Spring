@@ -25,6 +25,9 @@ NestIndexJoinExecutor::NestIndexJoinExecutor(ExecutorContext *exec_ctx, const Ne
 
 void NestIndexJoinExecutor::Init() { throw NotImplementedException("NestIndexJoinExecutor is not implemented"); }
 
-auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool { return false; }
+auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  // TODO(gukele): 实现index join
+  return false;
+}
 
 }  // namespace bustub

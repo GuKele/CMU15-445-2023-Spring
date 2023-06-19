@@ -29,6 +29,29 @@
 namespace bustub {
 
 /**
+ * lock 与 latch的区别
+ * latch：针对多线程来说的，保护内存数据结构
+ * lock：针对事务来说，实际上最终读写tuple都是需要页级别的latch
+ */
+
+/**
+ * 只有释放X、S锁才可能进入shrinking阶段，X锁的释放一定会转入shrinking。
+ *
+ * 读为提交：
+ *    释放X锁才会转入shrinking。在shrinking阶段不可以加任何锁；在growing阶段可以加X、IX锁。
+ *    读未提交不允许加S、IS、SIX锁。
+ *    实际上就是普通两阶段锁，存在脏读、级联abort问题。
+ *
+ * 读提交：
+ *    只有释放X锁才会转入shrinking。在shrinking阶段只有IS、S可以加锁；在growing阶段可以加任何锁。
+ *    相当于S锁不受两阶段锁影响，那么实际上就是严格两阶段锁，仍然存在不可重复读问题。
+ *
+ * 可重复读：
+ *    释放X/S锁都会转入shrinking。在shrinking阶段不可以加任何锁；在growing阶段可以加任何锁。
+ *    实际上就是强严格两阶段锁。
+ */
+
+/**
  * Two-phase Locking 两阶段锁协议
  * 1、增长阶段（growing phase）：事务可以获得锁，但不能释放锁。
  * 2、缩减阶段（shrinking phase）：事务可以释放锁，但不能获得新锁。
@@ -351,7 +374,10 @@ class Transaction {
 
  private:
   /** The current transaction state. */
-  TransactionState state_{TransactionState::GROWING};
+  // TODO(gukele): 原子变量 或者 setter/getter中加锁
+  // TransactionState state_{TransactionState::GROWING};
+  std::atomic<TransactionState> state_{TransactionState::GROWING};
+
   /** The isolation level of the transaction. */
   IsolationLevel isolation_level_;
   /** The thread ID, used in single-threaded transactions. */

@@ -1,0 +1,14 @@
+column_value_expression 是从一行tuple中取出想要的列
+
+constant_value_expression 是返回一个常数，例如select v2 + 5 from table1；
+加的5就是constant_value_expression表达式 返回的
+
+comparison_expression 就是比较
+
+logic_expression 是与或非等逻辑
+
+arithmetic_expression 就是加减乘除表达式
+
+string_expression 应该就是返回字符串
+
+

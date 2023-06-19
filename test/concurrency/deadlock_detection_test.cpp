@@ -12,7 +12,7 @@
 #include "gtest/gtest.h"
 
 namespace bustub {
-TEST(LockManagerDeadlockDetectionTest, DISABLED_EdgeTest) {
+TEST(LockManagerDeadlockDetectionTest, EdgeTest) {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
   lock_mgr.txn_manager_ = &txn_mgr;
@@ -56,7 +56,7 @@ TEST(LockManagerDeadlockDetectionTest, DISABLED_EdgeTest) {
   }
 }
 
-TEST(LockManagerDeadlockDetectionTest, DISABLED_BasicDeadlockDetectionTest) {
+TEST(LockManagerDeadlockDetectionTest, BasicDeadlockDetectionTest) {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
   lock_mgr.txn_manager_ = &txn_mgr;
@@ -76,12 +76,17 @@ TEST(LockManagerDeadlockDetectionTest, DISABLED_BasicDeadlockDetectionTest) {
     EXPECT_EQ(true, res);
     res = lock_mgr.LockRow(txn0, LockManager::LockMode::EXCLUSIVE, toid, rid0);
     EXPECT_EQ(true, res);
+
+    std::cout << "t0 get rid0" << std::endl;
+
     EXPECT_EQ(TransactionState::GROWING, txn1->GetState());
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // This will block
     res = lock_mgr.LockRow(txn0, LockManager::LockMode::EXCLUSIVE, toid, rid1);
     EXPECT_EQ(true, res);
+
+    std::cout << "t0 get rid1" << std::endl;
 
     lock_mgr.UnlockRow(txn0, toid, rid1);
     lock_mgr.UnlockRow(txn0, toid, rid0);
@@ -99,10 +104,15 @@ TEST(LockManagerDeadlockDetectionTest, DISABLED_BasicDeadlockDetectionTest) {
 
     res = lock_mgr.LockRow(txn1, LockManager::LockMode::EXCLUSIVE, toid, rid1);
     EXPECT_EQ(TransactionState::GROWING, txn1->GetState());
+    EXPECT_EQ(res, true);
+
+    std::cout << "t1 get rid1" << std::endl;
 
     // This will block
     res = lock_mgr.LockRow(txn1, LockManager::LockMode::EXCLUSIVE, toid, rid0);
     EXPECT_EQ(res, false);
+
+    std::cout << "t1 get rid0 false" << std::endl;
 
     EXPECT_EQ(TransactionState::ABORTED, txn1->GetState());
     txn_mgr.Abort(txn1);

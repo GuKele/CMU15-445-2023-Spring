@@ -18,8 +18,8 @@
 #include <memory>
 #include <mutex>  // NOLINT
 #include <optional>
-#include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -66,8 +66,7 @@ class LockManager {
   class LockRequestQueue {
    public:
     /** List of lock requests for the same resource (table or row) */
-    // TODO(gukele) 使用智能指针
-    // std::list<LockRequest *> request_queue_;
+    // TODO(gukele)：request_queue_划分为granted、non-granted两队列
     std::list<std::shared_ptr<LockRequest>> request_queue_;
     /** For notifying blocked transactions on this rid */
     std::condition_variable cv_;
@@ -89,7 +88,8 @@ class LockManager {
   }
 
   ~LockManager() {
-    UnlockAll();
+    // TODO(gukele)
+    // UnlockAll();
 
     enable_cycle_detection_ = false;
 
@@ -299,7 +299,7 @@ class LockManager {
    * @param[out] txn_id if the graph has a cycle, will contain the newest transaction ID
    * @return false if the graph has no cycle, otherwise stores the newest transaction ID in the cycle to txn_id
    */
-  auto HasCycle(txn_id_t *txn_id) -> bool;
+  auto HasCycle(txn_id_t *abort_txn_id) -> bool;
 
   /**
    * @return all edges in current waits_for graph
@@ -396,9 +396,20 @@ class LockManager {
 
   auto CheckNotHoldAppropriateLockOnRow(Transaction *txn, const table_oid_t &oid, LockMode table_lock_mode) -> bool;
 
-  auto FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, std::unordered_set<txn_id_t> &on_path,
-                 std::unordered_set<txn_id_t> &visited, txn_id_t *abort_txn_id) -> bool;
+  // auto DFSFindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, std::set<txn_id_t> &on_path,
+  //                std::unordered_set<txn_id_t> &visited, txn_id_t *abort_txn_id) -> bool;
+  auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path, std::unordered_set<txn_id_t> &unvisited, txn_id_t *abort_txn_id) -> bool;
+
+  void RemoveEdgesAbout(txn_id_t txn_id);
+
   void UnlockAll();
+
+  /**
+   * Releases all the locks held by the given transaction.
+   * @param txn the transaction whose locks should be released
+   */
+  // TODO(gukele): LockManager应该提供这个接口
+  void ReleaseLocks(Transaction *txn);
 
   /**
    * @brief 更新txn的table lock set
@@ -420,6 +431,10 @@ class LockManager {
 
   auto UpdateTxnState(Transaction *txn, LockMode unlock_mode) -> bool;
 
+  void AddWaitsForTable(txn_id_t txn_id, table_oid_t oid);
+  void AddWaitsForRow(txn_id_t txn_id, RID rid);
+  void BuildWaitForGraph();
+
   /** Structure that holds lock requests for a given table oid */
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
   /** Coordination */
@@ -433,8 +448,11 @@ class LockManager {
   std::atomic<bool> enable_cycle_detection_;
   std::thread *cycle_detection_thread_;
   /** Waits-for graph representation. */
-  std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
-  std::mutex waits_for_latch_;
+  std::unordered_map<txn_id_t, std::unordered_set<txn_id_t>> waits_for_;
+  std::unordered_map<txn_id_t, table_oid_t> waits_for_table_; // 记录每一个等待加锁的事务当前请求的加锁的表
+  std::unordered_map<txn_id_t, RID> waits_for_row_; // 记录每一个等待加锁的事务当前请求的加锁的行
+  std::unordered_set<txn_id_t> unvisited_;
+  std::mutex waits_for_latch_; // 只有一个死锁检测线程，目前没有必要上锁
 };
 
 }  // namespace bustub

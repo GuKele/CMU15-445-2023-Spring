@@ -14,7 +14,9 @@
 #include <memory>
 #include <optional>
 #include "common/config.h"
+#include "common/exception.h"
 #include "common/rid.h"
+#include "concurrency/lock_manager.h"
 #include "concurrency/transaction.h"
 #include "storage/table/table_iterator.h"
 #include "storage/table/tuple.h"
@@ -28,8 +30,18 @@ void SeqScanExecutor::Init() {
   // throw NotImplementedException("SeqScanExecutor is not implemented");
   auto exec_ctx = GetExecutorContext();
   auto table_info = exec_ctx->GetCatalog()->GetTable(plan_->GetTableOid());
-  // *iterator_ = table_info->table_->MakeEagerIterator();
+  // TODO(gukele):MakeIterator is introduced to avoid the Halloween problem in Project 3's UpdateExecutor, but you do not need it now.
   iterator_.emplace(table_info->table_->MakeEagerIterator());
+  // TODO(gukele):存在问题，按理说RR下应该是加S表锁，如果是DELETE ... WHERE ...应该是SIX锁。
+  // 但是好像是项目刚增加了意向锁，所以目前使用意向锁+行锁来实现
+  try {
+    if(exec_ctx_->GetTransaction()->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED &&
+      !exec_ctx_->GetLockManager()->LockTable(exec_ctx->GetTransaction(), LockManager::LockMode::INTENTION_SHARED, plan_->GetTableOid())) {
+      throw ExecutionException("seq scan lock table share failed");
+      }
+  } catch (const TransactionAbortException &e) {
+    throw ExecutionException("seq scan TransactionAbort");
+  }
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
