@@ -20,21 +20,21 @@
 namespace bustub {
 
 AggregationExecutor::AggregationExecutor(ExecutorContext *exec_ctx, const AggregationPlanNode *plan,
-                                         std::unique_ptr<AbstractExecutor> &&child)
+                                         std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx),
       plan_(plan),
-      child_(std::move(child)),
+      child_executor_(std::move(child_executor)),
       aht_(plan_->GetAggregates(), plan_->GetAggregateTypes()),
       aht_iter_(aht_.End()) {}
 
 void AggregationExecutor::Init() {
-  child_->Init();
+  child_executor_->Init();
   aht_.Clear();
   aht_iter_ = aht_.Begin();
   Tuple tuple{};
   RID rid{};
 
-  while (child_->Next(&tuple, &rid)) {
+  while (child_executor_->Next(&tuple, &rid)) {
     auto agg_key = MakeAggregateKey(&tuple);
     auto agg_val = MakeAggregateValue(&tuple);
     aht_.InsertCombine(agg_key, agg_val);
@@ -62,6 +62,6 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   return true;
 }
 
-auto AggregationExecutor::GetChildExecutor() const -> const AbstractExecutor * { return child_.get(); }
+auto AggregationExecutor::GetChildExecutor() const -> const AbstractExecutor * { return child_executor_.get(); }
 
 }  // namespace bustub

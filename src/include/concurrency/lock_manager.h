@@ -156,8 +156,12 @@ class LockManager {
    *    - If requested lock mode is the same as that of the lock presently held,
    *      Lock() should return true since it already has the lock.
    *    - If requested lock mode is different, Lock() should upgrade the lock held by the transaction.
+   *    - Basically there should be three steps to perform a lock upgrade in general
+   *      - 1. Check the precondition of upgrade
+   *      - 2. Drop the current lock, reserve the upgrade position
+   *      - 3. Wait to get the new lock granted
    *
-   *    A lock request being upgraded should be prioritised over other waiting lock requests on the same resource.
+   *    A lock request being upgraded should be prioritized over other waiting lock requests on the same resource.
    *
    *    While upgrading, only the following transitions should be allowed:
    *        IS -> [S, X, IX, SIX]
@@ -177,6 +181,9 @@ class LockManager {
    * BOOK KEEPING:
    *    If a lock is granted to a transaction, lock manager should update its
    *    lock sets appropriately (check transaction.h)
+   *
+   *    You probably want to consider which type of lock to directly apply on table
+   *    when implementing executor later
    */
 
   /**

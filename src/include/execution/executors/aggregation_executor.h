@@ -192,7 +192,7 @@ class AggregationExecutor : public AbstractExecutor {
    * @param child_executor The child executor from which inserted tuples are pulled (may be `nullptr`)
    */
   AggregationExecutor(ExecutorContext *exec_ctx, const AggregationPlanNode *plan,
-                      std::unique_ptr<AbstractExecutor> &&child);
+                      std::unique_ptr<AbstractExecutor> &&child_executor);
 
   /** Initialize the aggregation */
   void Init() override;
@@ -213,11 +213,11 @@ class AggregationExecutor : public AbstractExecutor {
 
  private:
   /** @return The tuple as an AggregateKey */
-  // groupby (key)
+  // group by (key)
   auto MakeAggregateKey(const Tuple *tuple) -> AggregateKey {
     std::vector<Value> keys;
     for (const auto &expr : plan_->GetGroupBys()) {
-      keys.emplace_back(expr->Evaluate(tuple, child_->GetOutputSchema()));
+      keys.emplace_back(expr->Evaluate(tuple, child_executor_->GetOutputSchema()));
     }
     return {keys};
   }
@@ -227,7 +227,7 @@ class AggregationExecutor : public AbstractExecutor {
   auto MakeAggregateValue(const Tuple *tuple) -> AggregateValue {
     std::vector<Value> vals;
     for (const auto &expr : plan_->GetAggregates()) {
-      vals.emplace_back(expr->Evaluate(tuple, child_->GetOutputSchema()));
+      vals.emplace_back(expr->Evaluate(tuple, child_executor_->GetOutputSchema()));
     }
     return {vals};
   }
@@ -235,8 +235,10 @@ class AggregationExecutor : public AbstractExecutor {
  private:
   /** The aggregation plan node */
   const AggregationPlanNode *plan_;
+
   /** The child executor that produces tuples over which the aggregation is computed */
-  std::unique_ptr<AbstractExecutor> child_;
+  std::unique_ptr<AbstractExecutor> child_executor_;
+
   /** Simple aggregation hash table */
   // TODO(Student): Uncomment SimpleAggregationHashTable aht_;
   SimpleAggregationHashTable aht_;
