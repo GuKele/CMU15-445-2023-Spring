@@ -30,7 +30,7 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
 void UpdateExecutor::Init() {
   // throw NotImplementedException("UpdateExecutor is not implemented");
   child_executor_->Init();
-  table_info_ = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+  table_info_ = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
 }
 
 // auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
@@ -38,7 +38,7 @@ void UpdateExecutor::Init() {
 //     return false;
 //   }
 
-//   auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+//   auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
 //   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
 //   Tuple old_tuple{};
 //   RID old_rid{};
@@ -83,7 +83,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     return false;
   }
 
-  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
   Tuple old_tuple{};
   RID old_rid{};
@@ -109,7 +109,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // insert new index
     // TODO(gukele): why insert bug!!!
     // auto new_rid = table_info->table_->InsertTuple({}, new_tuple, exec_ctx_->GetLockManager(),
-    // exec_ctx_->GetTransaction(),plan_->TableOid());
+    // exec_ctx_->GetTransaction(),plan_->GetTableOid());
     // TODO(gukele):
     // 不知道什么插入操作后while循环不退出，使得删除再插入来模拟更新无法实现，所以使用了update(文档中说除非为了project4冲榜，否则不要用)
     table_info->table_->UpdateTupleInPlaceUnsafe({}, new_tuple, old_rid);

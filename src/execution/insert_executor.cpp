@@ -34,7 +34,7 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 void InsertExecutor::Init() {
   // throw NotImplementedException("InsertExecutor is not implemented");
   auto txn = exec_ctx_->GetTransaction();
-  auto oid = plan_->TableOid();
+  auto oid = plan_->GetTableOid();
 
   try {
     if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid) &&
@@ -57,10 +57,10 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
   Tuple insert_tuple{};
   RID insert_rid{};
-  auto insert_table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+  auto insert_table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(insert_table_info->name_);
   auto txn = exec_ctx_->GetTransaction();
-  auto oid = plan_->TableOid();
+  auto oid = plan_->GetTableOid();
 
   int32_t insert_cnt = 0;
   while (child_executor_->Next(&insert_tuple, &insert_rid)) {

@@ -35,7 +35,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   if (is_end_) {
     return false;
   }
-  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
   Tuple delete_tuple{};
   RID delete_rid{};
