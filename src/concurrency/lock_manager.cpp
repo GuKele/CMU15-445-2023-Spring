@@ -374,11 +374,10 @@ void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
   if (auto iter = waits_for_.find(t1); iter != waits_for_.end()) {
     iter->second.erase(t2);
     // TODO(gukele): just for test
-    if(iter->second.empty()) {
+    if (iter->second.empty()) {
       unsafe_nodes_.erase(t1);
     }
   }
-
 }
 
 auto LockManager::HasCycle(txn_id_t *abort_txn_id) -> bool {
@@ -451,13 +450,13 @@ void LockManager::RunCycleDetection() {
         txn->SetState(TransactionState::ABORTED);
         {
           std::lock_guard<std::mutex> table_guard(table_lock_map_latch_);
-          if(auto iter = waits_for_table_.find(abort_txn_id); iter != waits_for_table_.end()) {
+          if (auto iter = waits_for_table_.find(abort_txn_id); iter != waits_for_table_.end()) {
             table_lock_map_[iter->second]->cv_.notify_all();
           }
         }
         {
           std::lock_guard<std::mutex> row_guard(row_lock_map_latch_);
-          if(auto iter = waits_for_row_.find(abort_txn_id); iter != waits_for_row_.end()) {
+          if (auto iter = waits_for_row_.find(abort_txn_id); iter != waits_for_row_.end()) {
             row_lock_map_[iter->second]->cv_.notify_all();
           }
         }

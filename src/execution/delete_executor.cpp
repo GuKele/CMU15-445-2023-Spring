@@ -35,7 +35,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   if (is_end_) {
     return false;
   }
-  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
+  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
   Tuple delete_tuple{};
   RID delete_rid{};
@@ -51,6 +51,10 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
                                                  index_info->index_->GetKeyAttrs());
       index_info->index_->DeleteEntry(key_tuple, delete_rid, exec_ctx_->GetTransaction());
     }
+
+    exec_ctx_->GetTransaction()->AppendIndexWriteRecord(IndexWriteRecord(
+        delete_rid, plan_->TableOid(), WType::DELETE, {}, delete_tuple, {}, exec_ctx_->GetCatalog()));
+
     ++delete_cnt;
   }
   std::vector<Value> values{};

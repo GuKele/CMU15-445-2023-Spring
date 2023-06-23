@@ -80,7 +80,7 @@ namespace bustub {
  *    |_________________________^
  *
  **/
- // abort/rollback
+// abort/rollback
 enum class TransactionState { GROWING, SHRINKING, COMMITTED, ABORTED };
 
 /**
@@ -134,14 +134,22 @@ class TableWriteRecord {
 class IndexWriteRecord {
  public:
   // NOLINTNEXTLINE
-  IndexWriteRecord(RID rid, table_oid_t table_oid, WType wtype, const Tuple &tuple, index_oid_t index_oid,
-                   Catalog *catalog)
-      : rid_(rid), table_oid_(table_oid), wtype_(wtype), tuple_(tuple), index_oid_(index_oid), catalog_(catalog) {}
+  IndexWriteRecord(RID rid, table_oid_t table_oid, WType wtype, const Tuple &tuple, const Tuple &old_tuple,
+                   std::vector<index_oid_t> index_oid_s, Catalog *catalog)
+      : rid_(rid),
+        table_oid_(table_oid),
+        wtype_(wtype),
+        tuple_(tuple),
+        old_tuple_(old_tuple),
+        index_oid_s_(std::move(index_oid_s)),
+        catalog_(catalog) {}
 
   /**
    * Note(spring2023): I don't know what are these for. If you are implementing leaderboard optimizations, you can
    * figure out how to use this structure to store what you need.
    */
+
+  // TODO(gukele): IndexWriteRecord结构设计不合理，而且BPlusTree中的txn并没有用上
 
   /** The rid is the value stored in the index. */
   RID rid_;
@@ -154,7 +162,7 @@ class IndexWriteRecord {
   /** The old tuple is only used for the update operation. */
   Tuple old_tuple_;
   /** Each table has an index list, this is the identifier of an index into the list. */
-  index_oid_t index_oid_;
+  std::vector<index_oid_t> index_oid_s_;
   /** The catalog contains metadata required to locate index. */
   Catalog *catalog_;
 };
@@ -272,8 +280,8 @@ class Transaction {
    * Adds an index write record into the index write set.
    * @param write_record write record to be added
    */
-  inline void AppendIndexWriteRecord(const IndexWriteRecord &write_record) {
-    index_write_set_->push_back(write_record);
+  inline void AppendIndexWriteRecord(const IndexWriteRecord &index_write_record) {
+    index_write_set_->push_back(index_write_record);
   }
 
   /**

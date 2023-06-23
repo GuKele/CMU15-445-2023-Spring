@@ -467,7 +467,7 @@ class LockManager {
   std::unordered_map<txn_id_t, std::unordered_set<txn_id_t>> waits_for_;
   std::unordered_map<txn_id_t, table_oid_t> waits_for_table_;  // 记录每一个等待加锁的事务当前请求的加锁的表
   std::unordered_map<txn_id_t, RID> waits_for_row_;  // 记录每一个等待加锁的事务当前请求的加锁的行
-  std::unordered_set<txn_id_t> unsafe_nodes_; // 当一个极大连通子图中不存在环了，该极大连通子图中的点都安全了
+  std::unordered_set<txn_id_t> unsafe_nodes_;  // 当一个极大连通子图中不存在环了，该极大连通子图中的点都安全了
   std::mutex waits_for_latch_;  // 只有一个死锁检测线程，目前没有必要上锁
 };
 

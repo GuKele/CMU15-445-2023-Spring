@@ -214,7 +214,7 @@ class AggregationExecutor : public AbstractExecutor {
 
  private:
   /** @return The tuple as an AggregateKey */
-  // groupby (key)
+  // group by (key)
   auto MakeAggregateKey(const Tuple *tuple) -> AggregateKey {
     std::vector<Value> keys;
     for (const auto &expr : plan_->GetGroupBys()) {

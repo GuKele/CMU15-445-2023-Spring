@@ -30,7 +30,7 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
 void SeqScanExecutor::Init() {
   // throw NotImplementedException("SeqScanExecutor is not implemented");
   auto exec_ctx = GetExecutorContext();
-  auto table_info = exec_ctx->GetCatalog()->GetTable(plan_->GetTableOid());
+  auto table_info = exec_ctx->GetCatalog()->GetTable(plan_->TableOid());
   // TODO(gukele): figure out Halloween problem。
   // MakeIterator is introduced to avoid the Halloween problem in Project 3's
   // UpdateExecutor, but you do not need it now.
@@ -39,7 +39,7 @@ void SeqScanExecutor::Init() {
   // 但是好像因为历史问题，项目刚增加了意向锁的实现，所以目前使用意向锁+行锁来实现
   try {
     const auto txn = exec_ctx->GetTransaction();
-    const auto oid = plan_->GetTableOid();
+    const auto oid = plan_->TableOid();
     if (exec_ctx_->IsDelete()) {  // 写锁
       /*
        * If the current operation is delete (by checking executor context
@@ -110,7 +110,7 @@ void SeqScanExecutor::Init() {
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   auto &iter = iterator_.value();
   auto txn = exec_ctx_->GetTransaction();
-  auto oid = plan_->GetTableOid();
+  auto oid = plan_->TableOid();
 
   while (!iter.IsEnd()) {
     // 加锁

@@ -215,8 +215,8 @@ auto BPLUSTREE_TYPE::CreateNewTree(const KeyType &key, const ValueType &value, C
 
   auto leaf_node = page.AsMut<LeafPage>();
   leaf_node->Init(leaf_max_size_);
-  leaf_node->Insert(key, value, comparator_);
-  return true;
+  auto result = leaf_node->Insert(key, value, comparator_);
+  return result;
 }
 
 INDEX_TEMPLATE_ARGUMENTS

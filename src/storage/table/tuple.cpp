@@ -75,6 +75,7 @@ auto Tuple::KeyFromTuple(const Schema &schema, const Schema &key_schema, const s
   for (auto idx : key_attrs) {
     values.emplace_back(this->GetValue(&schema, idx));
   }
+  // return {values, &key_schema}; // TODO(gukele): values会被拷贝到新建Tuple对象中
   return {std::move(values), &key_schema};
 }
 

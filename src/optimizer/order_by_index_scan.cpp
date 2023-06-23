@@ -54,7 +54,7 @@ auto Optimizer::OptimizeOrderByAsIndexScan(const AbstractPlanNodeRef &plan) -> A
 
     if (child_plan->GetType() == PlanType::SeqScan) {
       const auto &seq_scan = dynamic_cast<const SeqScanPlanNode &>(*child_plan);
-      const auto *table_info = catalog_.GetTable(seq_scan.GetTableOid());
+      const auto *table_info = catalog_.GetTable(seq_scan.TableOid());
       const auto indices = catalog_.GetTableIndexes(table_info->name_);
 
       for (const auto *index : indices) {
