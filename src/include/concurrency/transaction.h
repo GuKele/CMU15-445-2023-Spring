@@ -140,6 +140,8 @@ class IndexWriteRecord {
    * figure out how to use this structure to store what you need.
    */
 
+  // Note(gukele): 并没有单纯的来表示
+
   /** The rid is the value stored in the index. */
   RID rid_;
   /** Table oid. */

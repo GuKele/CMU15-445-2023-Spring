@@ -30,7 +30,7 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
 void UpdateExecutor::Init() {
   // throw NotImplementedException("UpdateExecutor is not implemented");
   child_executor_->Init();
-  table_info_ = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+  table_info_ = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
 }
 
 // auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
@@ -38,7 +38,7 @@ void UpdateExecutor::Init() {
 //     return false;
 //   }
 
-//   auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+//   auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
 //   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
 //   Tuple old_tuple{};
 //   RID old_rid{};
@@ -83,7 +83,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     return false;
   }
 
-  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+  auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
   Tuple old_tuple{};
   RID old_rid{};
@@ -93,23 +93,30 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     std::vector<Value> values{};
     values.reserve(child_executor_->GetOutputSchema().GetColumnCount());
     for (const auto &expr : plan_->target_expressions_) {
-      values.emplace_back(expr->Evaluate(&old_tuple, child_executor_->GetOutputSchema()));
+      auto value = expr->Evaluate(&old_tuple, child_executor_->GetOutputSchema());
+      values.emplace_back(value);
     }
-    auto new_tuple = Tuple{values, &child_executor_->GetOutputSchema()};
+    auto new_tuple = Tuple{std::move(values), &child_executor_->GetOutputSchema()};
 
     std::cout << update_cnt << " update : " << new_tuple.ToString(&child_executor_->GetOutputSchema()) << std::endl;
 
     // delete old
     // table_info->table_->UpdateTupleMeta(TupleMeta{INVALID_TXN_ID, INVALID_TXN_ID, true}, old_rid);
+    // TODO(gukele): 只更新改变了的索引
     for (auto index_info : indexs_info) {
       auto old_key_tuple = old_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                   index_info->index_->GetKeyAttrs());
+      auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
+                                                  index_info->index_->GetKeyAttrs());
+
+      // index_info->index_->
       index_info->index_->DeleteEntry(old_key_tuple, old_rid, exec_ctx_->GetTransaction());
+      index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
     }
     // insert new
     // TODO(gukele) why insert bug!!!
     // auto new_rid = table_info->table_->InsertTuple({}, new_tuple, exec_ctx_->GetLockManager(),
-    // exec_ctx_->GetTransaction(),plan_->TableOid());
+    // exec_ctx_->GetTransaction(),plan_->GetTableOid());
     // TODO(gukele)
     // 不知道什么插入操作后while循环不退出，使得删除再插入来模拟更新无法实现，所以使用了update(文档中说除非为了project4冲榜，否则不要用)
     table_info->table_->UpdateTupleInPlaceUnsafe({}, new_tuple, old_rid);
@@ -125,7 +132,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   std::vector<Value> values{};
   values.reserve(GetOutputSchema().GetColumnCount());
   values.emplace_back(TypeId::INTEGER, update_cnt);
-  *tuple = Tuple{values, &GetOutputSchema()};
+  *tuple = Tuple{std::move(values), &GetOutputSchema()};
   is_end_ = true;
 
   return true;

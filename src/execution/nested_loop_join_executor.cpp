@@ -122,7 +122,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         for (uint32_t i = 0; i < right_executor_->GetOutputSchema().GetColumnCount(); ++i) {
           values.push_back(right_tuple.GetValue(&right_executor_->GetOutputSchema(), i));
         }
-        *tuple = Tuple{values, &GetOutputSchema()};
+        *tuple = Tuple{std::move(values), &GetOutputSchema()};
         have_matched_ = true;
         return true;
       }
@@ -136,7 +136,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       for (uint32_t i = 0; i < right_executor_->GetOutputSchema().GetColumnCount(); ++i) {
         values.push_back(ValueFactory::GetNullValueByType(right_executor_->GetOutputSchema().GetColumn(i).GetType()));
       }
-      *tuple = Tuple{values, &GetOutputSchema()};
+      *tuple = Tuple{std::move(values), &GetOutputSchema()};
       cur_left_tuple_.reset();
       return true;
     }

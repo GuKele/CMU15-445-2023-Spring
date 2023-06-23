@@ -75,7 +75,8 @@ auto Tuple::KeyFromTuple(const Schema &schema, const Schema &key_schema, const s
   for (auto idx : key_attrs) {
     values.emplace_back(this->GetValue(&schema, idx));
   }
-  return {values, &key_schema};
+  // return {values, &key_schema}; // TODO(gukele): values 会被拷贝到新建AggregateValue对象中
+  return {std::move(values), &key_schema};
 }
 
 auto Tuple::GetDataPtr(const Schema *schema, const uint32_t column_idx) const -> const char * {

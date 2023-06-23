@@ -20,7 +20,7 @@ auto ValuesExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     values.push_back(col->Evaluate(nullptr, dummy_schema_));
   }
 
-  *tuple = Tuple{values, &GetOutputSchema()};
+  *tuple = Tuple{std::move(values), &GetOutputSchema()};
   cursor_ += 1;
 
   return true;

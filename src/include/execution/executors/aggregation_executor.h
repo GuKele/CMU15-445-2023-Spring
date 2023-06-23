@@ -60,7 +60,8 @@ class SimpleAggregationHashTable {
           break;
       }
     }
-    return {values};
+    // return {values}; // TODO(gukele): values 会被拷贝到新建AggregateValue对象中
+    return {std::move(values)};
   }
 
   /**

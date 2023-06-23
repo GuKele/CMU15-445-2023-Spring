@@ -43,7 +43,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
   Tuple insert_tuple{};
   RID insert_rid{};
-  auto insert_table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
+  auto insert_table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
   auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(insert_table_info->name_);
 
   int32_t insert_cnt = 0;
@@ -51,7 +51,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // TODO(gukele) other args
     // auto o_rid = insert_table_info->table_->InsertTuple({}, *tuple);
     auto o_rid = insert_table_info->table_->InsertTuple({}, insert_tuple, exec_ctx_->GetLockManager(),
-                                                        exec_ctx_->GetTransaction(), plan_->TableOid());
+                                                        exec_ctx_->GetTransaction(), plan_->GetTableOid());
 
     if (o_rid.has_value()) {
       insert_rid = *o_rid;
@@ -71,7 +71,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   std::vector<Value> values{};
   values.reserve(GetOutputSchema().GetColumnCount());
   values.emplace_back(INTEGER, insert_cnt);
-  *tuple = Tuple{values, &GetOutputSchema()};
+  *tuple = Tuple{std::move(values), &GetOutputSchema()};
   is_end_ = true;
 
   return true;
