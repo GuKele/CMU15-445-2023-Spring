@@ -225,6 +225,15 @@ auto BustubInstance::ExecuteSqlTxn(const std::string &sql, ResultWriter &writer,
 
   bool is_successful = true;
 
+  /*
+   // TODO(gukele): 仔细研究一下具体的执行过程
+   // NOTE(gukele)
+   * 1. Parser
+   * 2. Binder
+   * 3. Planer
+   * 4. Optimizer
+   */
+
   std::shared_lock<std::shared_mutex> l(catalog_lock_);
   bustub::Binder binder(*catalog_);
   binder.ParseAndSave(sql);

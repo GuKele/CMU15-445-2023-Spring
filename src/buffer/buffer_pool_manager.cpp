@@ -175,7 +175,7 @@ auto BufferPoolManager::FlushPageImpl(page_id_t page_id) -> bool {
 void BufferPoolManager::FlushAllPages() {
   std::lock_guard<std::mutex> guard(latch_);
   for (auto [page_id, frame_id] : page_table_) {
-    // TODO(gukele): maybe this flush all  dont care is or not dirty
+    // TODO(gukele): maybe this flush all don't care is or not dirty
     if (pages_[frame_id].IsDirty()) {
       // FlushPageImpl(page_id);
       disk_manager_->WritePage(page_id, pages_[frame_id].GetData());

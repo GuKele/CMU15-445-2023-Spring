@@ -30,7 +30,21 @@ void CommitTest1() {
 }
 
 // NOLINTNEXTLINE
-TEST(CommitAbortTest, DISABLED_CommitTestA) { CommitTest1(); }
+TEST(CommitAbortTest, CommitTestA) { CommitTest1(); }
+
+void AbortTest1() {
+  // should scan changes of committed txn
+  auto db = GetDbForCommitAbortTest("CommitTest1");
+  auto txn1 = Begin(*db, IsolationLevel::READ_UNCOMMITTED);
+  Insert(txn1, *db, 1);
+  Abort(*db, txn1);
+  auto txn2 = Begin(*db, IsolationLevel::READ_UNCOMMITTED);
+  Scan(txn2, *db, {1, 233, 234});
+  Abort(*db, txn2);
+}
+
+// NOLINTNEXTLINE
+TEST(CommitAbortTest, AbortTestA) { AbortTest1(); }
 
 void Test1(IsolationLevel lvl) {
   // should scan changes of committed txn
@@ -44,15 +58,17 @@ void Test1(IsolationLevel lvl) {
 }
 
 // NOLINTNEXTLINE
-TEST(VisibilityTest, DISABLED_TestA) {
+TEST(VisibilityTest, IsolationTestA) {
   // only this one will be public :)
   Test1(IsolationLevel::READ_COMMITTED);
 }
 
 // NOLINTNEXTLINE
-TEST(IsolationLevelTest, DISABLED_InsertTestA) {
+TEST(IsolationLevelTest, InsertTestA) {
   ExpectTwoTxn("InsertTestA.1", IsolationLevel::READ_UNCOMMITTED, IsolationLevel::READ_UNCOMMITTED, false, IS_INSERT,
                ExpectedOutcome::DirtyRead);
 }
+
+
 
 }  // namespace bustub

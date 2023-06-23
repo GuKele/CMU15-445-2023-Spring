@@ -99,18 +99,18 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
     std::cout << update_cnt << " update : " << new_tuple.ToString(&child_executor_->GetOutputSchema()) << std::endl;
 
-    // delete old
+    // delete old index
     // table_info->table_->UpdateTupleMeta(TupleMeta{INVALID_TXN_ID, INVALID_TXN_ID, true}, old_rid);
     for (auto index_info : indexs_info) {
       auto old_key_tuple = old_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                   index_info->index_->GetKeyAttrs());
       index_info->index_->DeleteEntry(old_key_tuple, old_rid, exec_ctx_->GetTransaction());
     }
-    // insert new
-    // TODO(gukele) why insert bug!!!
+    // insert new index
+    // TODO(gukele): why insert bug!!!
     // auto new_rid = table_info->table_->InsertTuple({}, new_tuple, exec_ctx_->GetLockManager(),
     // exec_ctx_->GetTransaction(),plan_->TableOid());
-    // TODO(gukele)
+    // TODO(gukele):
     // 不知道什么插入操作后while循环不退出，使得删除再插入来模拟更新无法实现，所以使用了update(文档中说除非为了project4冲榜，否则不要用)
     table_info->table_->UpdateTupleInPlaceUnsafe({}, new_tuple, old_rid);
     for (auto index_info : indexs_info) {

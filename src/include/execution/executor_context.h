@@ -108,7 +108,7 @@ class ExecutorContext {
   std::deque<std::pair<AbstractExecutor *, AbstractExecutor *>> nlj_check_exec_set_;
   /** The set of check options associated with this executor context */
   std::shared_ptr<CheckOptions> check_options_;
-  bool is_delete_;
+  bool is_delete_;  // will be set to true for DELETE and UPDATE
 };
 
 }  // namespace bustub

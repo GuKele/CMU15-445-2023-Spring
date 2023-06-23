@@ -30,7 +30,10 @@ void TransactionManager::Commit(Transaction *txn) {
 }
 
 void TransactionManager::Abort(Transaction *txn) {
-  /* TODO: revert all the changes in write set */
+  /* TODO(gukele): revert all the changes in write set */
+
+  BUSTUB_ASSERT(!txn->GetWriteSet()->empty(), "write set should not empty");
+  // BUSTUB_ASSERT(!txn->GetIndexWriteSet()->empty(), "index write set should not empty");
 
   ReleaseLocks(txn);
 

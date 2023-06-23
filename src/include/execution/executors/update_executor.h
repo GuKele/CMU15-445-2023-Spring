@@ -45,7 +45,7 @@ class UpdateExecutor : public AbstractExecutor {
   void Init() override;
 
   /**
-   * Yield the next tuple from the udpate.
+   * Yield the next tuple from the update.
    * @param[out] tuple The next tuple produced by the update
    * @param[out] rid The next tuple RID produced by the update (ignore this)
    * @return `true` if a tuple was produced, `false` if there are no more tuples

@@ -1,0 +1,109 @@
+// {
+//   "version": "2.0.0",
+//   "tasks": [
+//     {
+//       "label": "mkdir",
+//       "type": "shell",
+//       "command": "mkdir",
+//       "args": [
+//         "-p",
+//         "build"
+//       ],
+//     },
+//     {
+//       "label": "cmake", // 命令的别名
+//       "type": "shell",
+//       "command": "cmake", // 命令
+//       "args": [ // 参数列表
+//         ".."
+//       ],
+//       "options": {
+//         "cwd": "${workspaceFolder}/build", // 该命令的工作目录
+//       },
+//       "dependsOn": [ // 该命令执行前应该执行的命令
+//         "mkdir"
+//       ]
+//     },
+//     {
+//       "label": "make",
+//       "type": "shell",
+//       "command": "make",
+//       "args": [],
+//       "group": {
+//         "kind": "build",
+//         "isDefault": true
+//       },
+//       "options": {
+//         "cwd": "${workspaceFolder}/build",
+//       },
+//       "dependsOn": [
+//         "cmake"
+//       ]
+//     }
+//   ]
+// }
+
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cmake", // 命令的别名
+      "type": "shell",
+      "command": "cmake", // 命令
+      "args": [ // 参数列表
+        ".."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/build", // 该命令的工作目录
+      },
+      // "dependsOn": [ // 该命令执行前应该执行的命令
+      //   "mkdir"
+      // ]
+    },
+    {
+      "label": "make_test", // 任务名称，与launch.json的preLaunchTask相对应
+      "type": "shell",
+      "command": "make",
+      "args": [
+        // p1
+        // "lru_k_replacer_test",
+        // "buffer_pool_manager_test",
+        // p2
+        // "b_plus_tree_insert_test",
+        // "b_plus_tree_sequential_scale_test",
+        // "b_plus_tree_delete_test",
+        // "b_plus_tree_concurrent_test",
+        // "my_b_plus_tree_delete_test",
+        // "shell",
+        // "p3.03-update_test",
+        // "lock_manager_test",
+        "deadlock_detection_test",
+        // "txn_integration_test",
+        "-j8",
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/build",
+      },
+      "dependsOn": [ // 该命令执行前应该执行的命令
+        "cmake"
+      ]
+    },
+    {
+      "label": "make_my_test", // 任务名称，与launch.json的preLaunchTask相对应
+      "type": "shell",
+      "command": "make",
+      "args": [
+        "my_b_plus_tree_delete_test",
+        "-j4",
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/build",
+      },
+      "dependsOn": [ // 该命令执行前应该执行的命令
+        "cmake"
+      ]
+    }
+  ]
+}

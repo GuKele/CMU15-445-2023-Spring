@@ -28,6 +28,8 @@
 
 namespace bustub {
 
+// NOTE(gukele)
+
 /**
  * lock 与 latch的区别
  * latch：针对多线程来说的，保护内存数据结构
@@ -78,6 +80,7 @@ namespace bustub {
  *    |_________________________^
  *
  **/
+ // abort/rollback
 enum class TransactionState { GROWING, SHRINKING, COMMITTED, ABORTED };
 
 /**
@@ -120,8 +123,8 @@ class TableWriteRecord {
   RID rid_;
   TableHeap *table_heap_;
 
-  // Recording write type might be useful if you want to implement in-place update for leaderboard
-  // optimization. You don't need it for the basic implementation.
+  // Recording write type might be useful if you want to implement in-place update for leaderboard optimization.
+  // You don't need it for the basic implementation.
   WType wtype_;
 };
 
@@ -179,8 +182,9 @@ class TransactionAbortException : public std::exception {
 
  public:
   explicit TransactionAbortException(txn_id_t txn_id, AbortReason abort_reason)
-    : txn_id_(txn_id), abort_reason_(abort_reason)
-  { std::cerr << GetInfo() << std::endl; }
+      : txn_id_(txn_id), abort_reason_(abort_reason) {
+    std::cerr << GetInfo() << std::endl;
+  }
   auto GetTransactionId() -> txn_id_t { return txn_id_; }
   auto GetAbortReason() -> AbortReason { return abort_reason_; }
   auto GetInfo() -> std::string {
@@ -192,7 +196,7 @@ class TransactionAbortException : public std::exception {
         return "Transaction " + std::to_string(txn_id_) +
                " aborted because another transaction is already waiting to upgrade its lock\n";
       case AbortReason::LOCK_SHARED_ON_READ_UNCOMMITTED:
-        return "Transaction " + std::to_string(txn_id_) + " aborted on lockshared on READ_UNCOMMITTED\n";
+        return "Transaction " + std::to_string(txn_id_) + " aborted on lock shared on READ_UNCOMMITTED\n";
       case AbortReason::TABLE_LOCK_NOT_PRESENT:
         return "Transaction " + std::to_string(txn_id_) + " aborted because table lock not present\n";
       case AbortReason::ATTEMPTED_INTENTION_LOCK_ON_ROW:
@@ -287,6 +291,8 @@ class Transaction {
    */
   inline void AddIntoDeletedPageSet(page_id_t page_id) { deleted_page_set_->insert(page_id); }
 
+  // TODO(gukele): 应该提供Add/Delete带锁修改lock_set_的接口,而不是像下面一样提供Getter，还需要自己加锁
+
   /** @return the set of rows under a shared lock */
   inline auto GetSharedRowLockSet() -> std::shared_ptr<std::unordered_map<table_oid_t, std::unordered_set<RID>>> {
     return s_row_lock_set_;
@@ -378,6 +384,7 @@ class Transaction {
   // TransactionState state_{TransactionState::GROWING};
   std::atomic<TransactionState> state_{TransactionState::GROWING};
 
+  // TODO(gukele): const?
   /** The isolation level of the transaction. */
   IsolationLevel isolation_level_;
   /** The thread ID, used in single-threaded transactions. */
@@ -392,6 +399,7 @@ class Transaction {
   /** The LSN of the last record written by the transaction. */
   lsn_t prev_lsn_;
 
+  // TODO(gukele): 一个事物可能对应多个线程？LockManager中deadlock detection线程至多读写state_
   std::mutex latch_;
 
   /** Concurrent index: the pages that were latched during index operation. */

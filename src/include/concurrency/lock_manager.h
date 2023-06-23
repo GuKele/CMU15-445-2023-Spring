@@ -18,8 +18,9 @@
 #include <memory>
 #include <mutex>  // NOLINT
 #include <optional>
-#include <unordered_set>
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -34,6 +35,7 @@ class TransactionManager;
 
 /**
  * LockManager handles transactions asking for locks on records.
+ * Innodb 则是对索引进行加锁，如果不使用索引则会对整个表加表锁
  */
 class LockManager {
  public:
@@ -66,7 +68,7 @@ class LockManager {
   class LockRequestQueue {
    public:
     /** List of lock requests for the same resource (table or row) */
-    // TODO(gukele)：request_queue_划分为granted、non-granted两队列
+    // TODO(gukele): request_queue_划分为granted、non-granted两队列
     std::list<std::shared_ptr<LockRequest>> request_queue_;
     /** For notifying blocked transactions on this rid */
     std::condition_variable cv_;
@@ -99,6 +101,7 @@ class LockManager {
     }
   }
 
+  // NOTE(gukele)
   /**
    * [LOCK_NOTE]
    *
@@ -109,7 +112,8 @@ class LockManager {
    *
    * MULTIPLE TRANSACTIONS:
    *    LockManager should maintain a queue for each resource; locks should be granted to transactions in a FIFO manner.
-   *    If there are multiple compatible lock requests, all should be granted at the same time as long as FIFO is honoured.
+   *    If there are multiple compatible lock requests, all should be granted at the same time as long as FIFO is
+   * honoured.
    *
    * SUPPORTED LOCK MODES:
    *    Table locking should support all lock modes.
@@ -164,8 +168,9 @@ class LockManager {
    *        S -> [X, SIX]
    *        IX -> [X, SIX]
    *        SIX -> [X]
-   *    总的等级 IS -> S -> SIX -> X
-   *            IS -> IX -> SIX -> X
+   *    总结：
+   *        IS -> S -> SIX -> X
+   *        IS -> IX -> SIX -> X
    *    Any other upgrade is considered incompatible, and such an attempt should set the TransactionState as ABORTED
    *    and throw a TransactionAbortException (INCOMPATIBLE_UPGRADE)
    *
@@ -326,7 +331,8 @@ class LockManager {
    * @return -1表示不是锁升级事件，0表示是锁升级事件但锁升级失败，1表示是锁升级事件并且锁升级成功
    * @return std::optional == std::nullopt表示不是锁升级事件，true表示锁升级成功，false表示锁升级失败
    */
-  auto UpgradeLockTable(Transaction *txn, LockMode lock_mode, LockRequestQueue *table_lock_request_queue) -> std::optional<bool>;
+  auto UpgradeLockTable(Transaction *txn, LockMode lock_mode, LockRequestQueue *table_lock_request_queue,
+                        std::unique_lock<std::mutex> &lock) -> std::optional<bool>;
 
   /**
    * @brief
@@ -337,7 +343,8 @@ class LockManager {
    * @param row_lock_request_queue
    * @return std::optional == std::nullopt表示不是锁升级事件，true表示锁升级成功，false表示锁升级失败
    */
-  auto UpgradeLockRow(Transaction *txn, LockMode lock_mode, LockRequestQueue *row_lock_request_queue) -> std::optional<bool>;
+  auto UpgradeLockRow(Transaction *txn, LockMode lock_mode, LockRequestQueue *row_lock_request_queue,
+                      std::unique_lock<std::mutex> &lock) -> std::optional<bool>;
 
   /**
    * @brief 检测两个锁是否兼容
@@ -396,11 +403,13 @@ class LockManager {
 
   auto CheckNotHoldAppropriateLockOnRow(Transaction *txn, const table_oid_t &oid, LockMode table_lock_mode) -> bool;
 
-  // auto DFSFindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, std::set<txn_id_t> &on_path,
-  //                std::unordered_set<txn_id_t> &visited, txn_id_t *abort_txn_id) -> bool;
-  auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path, std::unordered_set<txn_id_t> &unvisited, txn_id_t *abort_txn_id) -> bool;
+  auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path, std::unordered_set<txn_id_t> &visited,
+                    std::unordered_set<txn_id_t> &connected_component) -> bool;
 
-  void RemoveEdgesAbout(txn_id_t txn_id);
+  auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path, std::unordered_set<txn_id_t> &unvisited,
+                    txn_id_t *abort_txn_id) -> bool;
+
+  void RemoveVertex(txn_id_t txn_id);
 
   void UnlockAll();
 
@@ -433,7 +442,7 @@ class LockManager {
 
   void AddWaitsForTable(txn_id_t txn_id, table_oid_t oid);
   void AddWaitsForRow(txn_id_t txn_id, RID rid);
-  void BuildWaitForGraph();
+  void BuildDeadlockDetectionGraph();
 
   /** Structure that holds lock requests for a given table oid */
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
@@ -449,10 +458,10 @@ class LockManager {
   std::thread *cycle_detection_thread_;
   /** Waits-for graph representation. */
   std::unordered_map<txn_id_t, std::unordered_set<txn_id_t>> waits_for_;
-  std::unordered_map<txn_id_t, table_oid_t> waits_for_table_; // 记录每一个等待加锁的事务当前请求的加锁的表
-  std::unordered_map<txn_id_t, RID> waits_for_row_; // 记录每一个等待加锁的事务当前请求的加锁的行
-  std::unordered_set<txn_id_t> unvisited_;
-  std::mutex waits_for_latch_; // 只有一个死锁检测线程，目前没有必要上锁
+  std::unordered_map<txn_id_t, table_oid_t> waits_for_table_;  // 记录每一个等待加锁的事务当前请求的加锁的表
+  std::unordered_map<txn_id_t, RID> waits_for_row_;  // 记录每一个等待加锁的事务当前请求的加锁的行
+  std::unordered_set<txn_id_t> unsafe_nodes_; // 当一个极大连通子图中不存在环了，该极大连通子图中的点都安全了
+  std::mutex waits_for_latch_;  // 只有一个死锁检测线程，目前没有必要上锁
 };
 
 }  // namespace bustub

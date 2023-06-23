@@ -101,7 +101,9 @@ class IndexMetadata {
 /////////////////////////////////////////////////////////////////////
 
 /**
- * class Index - Base class for derived indices of different types
+ * class Index - Abstract base class for derived indices of different types
+ *
+ * b_plus_tree_index.h etc.
  *
  * The index structure majorly maintains information on the schema of the
  * underlying table and the mapping relation between index key
