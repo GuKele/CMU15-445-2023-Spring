@@ -108,28 +108,35 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
     std::cout << update_cnt << " update : " << new_tuple.ToString(&child_executor_->GetOutputSchema()) << std::endl;
 
-    // delete old
-    // table_info->table_->UpdateTupleMeta(TupleMeta{INVALID_TXN_ID, INVALID_TXN_ID, true}, old_rid);
+    // delete old and insert new
     // TODO(gukele): 只更新改变了的索引
-    for (auto index_info : indexs_info) {
-      bool change = false;
-      for(auto key_attr : index_info->index_->GetKeyAttrs()) {
-        if(diff_key_attrs.count(key_attr) == 1) {
-          change = true;
-          break;
-        }
-      }
-      if(change) {
-        auto old_key_tuple = old_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
-                                                    index_info->index_->GetKeyAttrs());
-        index_info->index_->DeleteEntry(old_key_tuple, old_rid, exec_ctx_->GetTransaction());
 
-        auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
+    // for (auto index_info : indexs_info) {
+    //   bool change = false;
+    //   for(auto key_attr : index_info->index_->GetKeyAttrs()) {
+    //     if(diff_key_attrs.count(key_attr) == 1) {
+    //       change = true;
+    //       break;
+    //     }
+    //   }
+    //   if(change) {
+    //     auto old_key_tuple = old_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
+    //                                                 index_info->index_->GetKeyAttrs());
+    //     index_info->index_->DeleteEntry(old_key_tuple, old_rid, exec_ctx_->GetTransaction());
+
+    //     auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
+    //                                                 index_info->index_->GetKeyAttrs());
+    //     index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
+    //   }
+    // }
+
+
+    for (auto index_info : indexs_info) {
+      auto old_key_tuple = old_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                     index_info->index_->GetKeyAttrs());
-        index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
-      }
+      index_info->index_->DeleteEntry(old_key_tuple, old_rid, exec_ctx_->GetTransaction());
     }
-    // insert new
+
     // TODO(gukele) why insert bug!!!
     // auto new_rid = table_info->table_->InsertTuple({}, new_tuple, exec_ctx_->GetLockManager(),
     // exec_ctx_->GetTransaction(),plan_->GetTableOid());
@@ -137,12 +144,11 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // 不知道什么插入操作后while循环不退出，使得删除再插入来模拟更新无法实现，所以使用了update(文档中说除非为了project4冲榜，否则不要用)
     table_info->table_->UpdateTupleInPlaceUnsafe({}, new_tuple, old_rid);
 
-    // for (auto index_info : indexs_info) {
-    //   auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
-    //                                               index_info->index_->GetKeyAttrs());
-    //   index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
-    //   // index_info->index_->InsertEntry(new_key_tuple, *new_rid, exec_ctx_->GetTransaction());
-    // }
+    for (auto index_info : indexs_info) {
+      auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
+                                                  index_info->index_->GetKeyAttrs());
+      index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
+    }
 
     ++update_cnt;
   }
