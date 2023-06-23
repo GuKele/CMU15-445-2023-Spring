@@ -60,7 +60,8 @@ class SimpleAggregationHashTable {
           break;
       }
     }
-    return {values};
+    // return {values};  // TODO(gukele): values会拷贝到返回值AggregateValue对象的构造函数的形参中
+    return {std::move(values)};
   }
 
   /**

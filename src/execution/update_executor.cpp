@@ -52,7 +52,7 @@ void UpdateExecutor::Init() {
 //       auto value = expr->Evaluate(&old_tuple, child_executor_->GetOutputSchema());
 //       values.emplace_back(std::move(value));
 //     }
-//     Tuple new_tuple{values, &child_executor_->GetOutputSchema()};
+//     Tuple new_Tuple{std::move(values), &child_executor_->GetOutputSchema()};
 
 //     // tuple
 //     table_info->table_->UpdateTupleMeta(TupleMeta{INVALID_TXN_ID, INVALID_TXN_ID, true}, old_rid);
@@ -72,7 +72,7 @@ void UpdateExecutor::Init() {
 //   std::vector<Value> values{};
 //   values.reserve(GetOutputSchema().GetColumnCount());
 //   values.emplace_back(INTEGER, update_cnt);
-//   *tuple = Tuple{values, &GetOutputSchema()};
+//   *tuple = Tuple{std::move(values), &GetOutputSchema()};
 //   is_end_ = true;
 
 //   return true;
@@ -95,7 +95,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     for (const auto &expr : plan_->target_expressions_) {
       values.emplace_back(expr->Evaluate(&old_tuple, child_executor_->GetOutputSchema()));
     }
-    auto new_tuple = Tuple{values, &child_executor_->GetOutputSchema()};
+    auto new_tuple = Tuple{std::move(values), &child_executor_->GetOutputSchema()};
 
     std::cout << update_cnt << " update : " << new_tuple.ToString(&child_executor_->GetOutputSchema()) << std::endl;
 
@@ -125,7 +125,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   std::vector<Value> values{};
   values.reserve(GetOutputSchema().GetColumnCount());
   values.emplace_back(TypeId::INTEGER, update_cnt);
-  *tuple = Tuple{values, &GetOutputSchema()};
+  *tuple = Tuple{std::move(values), &GetOutputSchema()};
   is_end_ = true;
 
   return true;

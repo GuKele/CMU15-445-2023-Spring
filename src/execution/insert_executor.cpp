@@ -90,7 +90,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   std::vector<Value> values{};
   values.reserve(GetOutputSchema().GetColumnCount());
   values.emplace_back(INTEGER, insert_cnt);
-  *tuple = Tuple{values, &GetOutputSchema()};
+  *tuple = Tuple{std::move(values), &GetOutputSchema()};
   is_end_ = true;
 
   return true;
