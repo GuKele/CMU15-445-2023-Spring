@@ -93,8 +93,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     std::vector<Value> values{};
     values.reserve(child_executor_->GetOutputSchema().GetColumnCount());
     for (const auto &expr : plan_->target_expressions_) {
-      auto value = expr->Evaluate(&old_tuple, child_executor_->GetOutputSchema());
-      values.emplace_back(value);
+      values.emplace_back(expr->Evaluate(&old_tuple, child_executor_->GetOutputSchema()););
     }
     auto new_tuple = Tuple{std::move(values), &child_executor_->GetOutputSchema()};
 
@@ -106,12 +105,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     for (auto index_info : indexs_info) {
       auto old_key_tuple = old_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                   index_info->index_->GetKeyAttrs());
-      auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
-                                                  index_info->index_->GetKeyAttrs());
-
-      // index_info->index_->
       index_info->index_->DeleteEntry(old_key_tuple, old_rid, exec_ctx_->GetTransaction());
-      index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
     }
     // insert new
     // TODO(gukele) why insert bug!!!
