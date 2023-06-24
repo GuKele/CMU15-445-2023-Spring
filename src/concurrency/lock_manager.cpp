@@ -404,7 +404,7 @@ auto LockManager::HasCycle(txn_id_t *abort_txn_id) -> bool {
       // for(const auto &source_txn : unsafe_nodes_) {
       std::unordered_set<txn_id_t> on_path{};
       std::unordered_set<txn_id_t> visited{};
-      std::unordered_set<txn_id_t> connected_component{};  //连通分量(极大连通子图)
+      std::unordered_set<txn_id_t> connected_component{};  // 连通分量(极大连通子图)
       if (DFSFindCycle(source_txn, on_path, visited, connected_component)) {
         *abort_txn_id = *on_path.begin();
         for (const auto &txn_id : on_path) {

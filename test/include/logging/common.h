@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <utility>
 #include <vector>
 
 #include "storage/table/tuple.h"

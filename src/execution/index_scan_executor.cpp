@@ -25,15 +25,17 @@ void IndexScanExecutor::Init() {
 }
 
 auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (iter_.IsEnd()) {
-    return false;
+  while (!iter_.IsEnd()) {
+    *rid = (*iter_).second;
+    auto [tupe_meta, tup] = table_info_->table_->GetTuple(*rid);
+    ++iter_;
+    if (!tupe_meta.is_deleted_) {
+      *tuple = std::move(tup);
+      return true;
+    }
   }
 
-  *rid = (*iter_).second;
-  *tuple = table_info_->table_->GetTuple(*rid).second;
-  ++iter_;
-
-  return true;
+  return false;
 }
 
 }  // namespace bustub

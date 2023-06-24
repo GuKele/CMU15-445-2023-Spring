@@ -97,6 +97,7 @@ void TablePage::UpdateTupleInPlaceUnsafe(const TupleMeta &meta, const Tuple &tup
   }
   auto &[offset, size, old_meta] = tuple_info_[tuple_id];
   if (size != tuple.GetLength()) {
+    std::cout << "old size:" << size << " new size:" << tuple.GetLength() << std::endl;
     throw bustub::Exception("Tuple size mismatch");
   }
   if (!old_meta.is_deleted_ && meta.is_deleted_) {

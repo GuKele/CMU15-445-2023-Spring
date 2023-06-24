@@ -33,62 +33,11 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
 
 void UpdateExecutor::Init() {
   // throw NotImplementedException("UpdateExecutor is not implemented");
+  // std::cout << plan_->ToString() << std::endl;
+
   child_executor_->Init();
   table_info_ = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
 }
-
-// auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
-//   if(is_end_) {
-//     return false;
-//   }
-
-//   auto table_info =
-//   GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid()); auto
-//   indexs_info =
-//   GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
-//   Tuple old_tuple{};
-//   RID old_rid{};
-
-//   int32_t update_cnt = 0;
-//   while(child_executor_->Next(&old_tuple, &old_rid)) {
-//     // std::cout << "what happend????" << std::endl;
-
-//     std::vector<Value> values{};
-//     for(const auto &expr : plan_->target_expressions_) {
-//       auto value = expr->Evaluate(&old_tuple,
-//       child_executor_->GetOutputSchema());
-//       values.emplace_back(std::move(value));
-//     }
-//     Tuple new_tuple{values, &child_executor_->GetOutputSchema()};
-
-//     // tuple
-//     table_info->table_->UpdateTupleMeta(TupleMeta{INVALID_TXN_ID,
-//     INVALID_TXN_ID, true}, old_rid); auto new_rid =
-//     table_info->table_->InsertTuple(TupleMeta{INVALID_TXN_ID, INVALID_TXN_ID,
-//     false}, new_tuple).value();
-
-//     // indexs
-//     for(auto index_info : indexs_info) {
-//       auto old_key_tuple =
-//       tuple->KeyFromTuple(child_executor_->GetOutputSchema(),
-//       index_info->key_schema_, index_info->index_->GetKeyAttrs());
-//       index_info->index_->DeleteEntry(old_key_tuple, old_rid,
-//       exec_ctx_->GetTransaction()); auto new_key_tuple =
-//       new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(),
-//       index_info->key_schema_, index_info->index_->GetKeyAttrs());
-//       index_info->index_->InsertEntry(new_key_tuple, new_rid,
-//       exec_ctx_->GetTransaction());
-//     }
-//     ++update_cnt;
-//   }
-//   std::vector<Value> values{};
-//   values.reserve(GetOutputSchema().GetColumnCount());
-//   values.emplace_back(INTEGER, update_cnt);
-//   *tuple = Tuple{values, &GetOutputSchema()};
-//   is_end_ = true;
-
-//   return true;
-// }
 
 auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   if (is_end_) {
@@ -117,8 +66,6 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     }
     auto new_tuple = Tuple{std::move(values), &child_executor_->GetOutputSchema()};
 
-    std::cout << update_cnt << " update : " << new_tuple.ToString(&child_executor_->GetOutputSchema()) << std::endl;
-
     // delete old and insert new
     // 只更新改变了的索引
     std::vector<index_oid_t> index_oid_s;
@@ -139,38 +86,26 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                     index_info->index_->GetKeyAttrs());
         index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
+
+        IndexWriteRecord index_write_record(old_rid, plan_->TableOid(), WType::UPDATE, new_tuple,
+                                            index_info->index_oid_, exec_ctx_->GetCatalog());
+        index_write_record.old_tuple_ = old_tuple;
+        exec_ctx_->GetTransaction()->AppendIndexWriteRecord(index_write_record);
       }
     }
-    exec_ctx_->GetTransaction()->AppendIndexWriteRecord(
-        {old_rid, plan_->TableOid(), WType::UPDATE, new_tuple, old_tuple, index_oid_s, exec_ctx_->GetCatalog()});
 
-    // delete old indexs
-    // for (auto index_info : indexs_info) {
-    //   auto old_key_tuple =
-    //   old_tuple.KeyFromTuple(child_executor_->GetOutputSchema(),
-    //   index_info->key_schema_,
-    //                                                 index_info->index_->GetKeyAttrs());
-    //   index_info->index_->DeleteEntry(old_key_tuple, old_rid,
-    //   exec_ctx_->GetTransaction());
-    // }
+    // TODO(gukele): for the gradescope test, we can't change IndexWriteRecord
+    // exec_ctx_->GetTransaction()->AppendIndexWriteRecord(
+    //     {old_rid, plan_->TableOid(), WType::UPDATE, new_tuple, old_tuple, index_oid_s, exec_ctx_->GetCatalog()});
 
     // TODO(gukele) why insert bug!!!
     // auto new_rid = table_info->table_->InsertTuple({}, new_tuple,
     // exec_ctx_->GetLockManager(),
     // exec_ctx_->GetTransaction(),plan_->TableOid());
-    // TODO(gukele)
     // 不知道什么插入操作后while循环不退出，使得删除再插入来模拟更新无法实现，所以使用了update(文档中说除非为了project4冲榜，否则不要用)
-    table_info->table_->UpdateTupleInPlaceUnsafe({}, new_tuple, old_rid);
 
-    // insert new indexs
-    // for (auto index_info : indexs_info) {
-    //   auto new_key_tuple =
-    //   new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(),
-    //   index_info->key_schema_,
-    //                                               index_info->index_->GetKeyAttrs());
-    //   index_info->index_->InsertEntry(new_key_tuple, old_rid,
-    //   exec_ctx_->GetTransaction());
-    // }
+    // 原地修改
+    table_info->table_->UpdateTupleInPlaceUnsafe({}, new_tuple, old_rid);
 
     ++update_cnt;
   }

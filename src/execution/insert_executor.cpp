@@ -33,7 +33,10 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 
 void InsertExecutor::Init() {
   // throw NotImplementedException("InsertExecutor is not implemented");
+  // std::cout << plan_->ToString() << std::endl;
+
   auto txn = exec_ctx_->GetTransaction();
+  is_end_ = false;
   auto oid = plan_->TableOid();
 
   try {
@@ -70,8 +73,11 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     if (o_rid.has_value()) {
       insert_rid = *o_rid;
       txn->LockTxn();
-      txn->AppendIndexWriteRecord(
-          IndexWriteRecord(insert_rid, oid, WType::INSERT, insert_tuple, {}, {}, exec_ctx_->GetCatalog()));
+
+      IndexWriteRecord index_write_record(insert_rid, plan_->TableOid(), WType::INSERT, insert_tuple, {},
+                                          exec_ctx_->GetCatalog());
+      exec_ctx_->GetTransaction()->AppendIndexWriteRecord(index_write_record);
+
       txn->UnlockTxn();
     } else {
       throw Exception(ExceptionType::OUT_OF_RANGE, "Insert Error");

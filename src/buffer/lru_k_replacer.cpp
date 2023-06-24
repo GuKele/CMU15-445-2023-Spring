@@ -38,7 +38,6 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
   if (map_it == nodes_.end()) {
     if (nodes_.size() == max_frame_capacity_ && !EvictImpl(nullptr)) {
       // 满了，并且也没办法排除一个
-      // std::cout << "don't have space" << std::endl;
     } else {
       non_k_nodes_fifo_.push_back(frame_id);
       nodes_[frame_id] = NodePair(--(non_k_nodes_fifo_.end()), LRUKNode(frame_id));

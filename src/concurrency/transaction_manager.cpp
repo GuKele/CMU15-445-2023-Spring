@@ -39,7 +39,8 @@ void TransactionManager::Abort(Transaction *txn) {
 
   auto &write_set = *txn->GetIndexWriteSet();
   while (!write_set.empty()) {
-    auto &item = write_set.front();
+    // NOTE(gukele): 应该逆序处理，设想该事务先插入一行，然后又删除刚插入的一行，而正序处理会出现错误的结果
+    auto &item = write_set.back();
     auto &tid = item.table_oid_;
     auto &rid = item.rid_;
     auto table_info = item.catalog_->GetTable(tid);
@@ -66,19 +67,29 @@ void TransactionManager::Abort(Transaction *txn) {
     } else if (item.wtype_ == WType::UPDATE) {
       table.UpdateTupleInPlaceUnsafe({}, old_tuple, rid);
 
-      for (auto index_oid : item.index_oid_s_) {
-        auto index_info = item.catalog_->GetIndex(index_oid);
-        auto old_key_tuple =
-            old_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
-        auto new_key_tuple =
-            new_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
+      // for (auto index_oid : item.index_oid_s_) {
+      //   auto index_info = item.catalog_->GetIndex(index_oid);
+      //   auto old_key_tuple =
+      //       old_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
+      //   auto new_key_tuple =
+      //       new_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
 
-        index_info->index_->DeleteEntry(new_key_tuple, rid, txn);
-        index_info->index_->InsertEntry(old_key_tuple, rid, txn);
-      }
+      //   index_info->index_->DeleteEntry(new_key_tuple, rid, txn);
+      //   index_info->index_->InsertEntry(old_key_tuple, rid, txn);
+      // }
+
+      auto &index_oid = item.index_oid_;
+      auto index_info = item.catalog_->GetIndex(index_oid);
+      auto old_key_tuple =
+          old_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
+      auto new_key_tuple =
+          new_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
+
+      index_info->index_->DeleteEntry(new_key_tuple, rid, txn);
+      index_info->index_->InsertEntry(old_key_tuple, rid, txn);
     }
 
-    write_set.pop_front();
+    write_set.pop_back();
   }
 
   txn->UnlockTxn();

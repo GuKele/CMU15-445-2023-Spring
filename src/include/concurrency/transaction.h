@@ -134,15 +134,9 @@ class TableWriteRecord {
 class IndexWriteRecord {
  public:
   // NOLINTNEXTLINE
-  IndexWriteRecord(RID rid, table_oid_t table_oid, WType wtype, const Tuple &tuple, const Tuple &old_tuple,
-                   std::vector<index_oid_t> index_oid_s, Catalog *catalog)
-      : rid_(rid),
-        table_oid_(table_oid),
-        wtype_(wtype),
-        tuple_(tuple),
-        old_tuple_(old_tuple),
-        index_oid_s_(std::move(index_oid_s)),
-        catalog_(catalog) {}
+  IndexWriteRecord(RID rid, table_oid_t table_oid, WType wtype, const Tuple &tuple, index_oid_t index_oid,
+                   Catalog *catalog)
+      : rid_(rid), table_oid_(table_oid), wtype_(wtype), tuple_(tuple), index_oid_(index_oid), catalog_(catalog) {}
 
   /**
    * Note(spring2023): I don't know what are these for. If you are implementing leaderboard optimizations, you can
@@ -162,7 +156,7 @@ class IndexWriteRecord {
   /** The old tuple is only used for the update operation. */
   Tuple old_tuple_;
   /** Each table has an index list, this is the identifier of an index into the list. */
-  std::vector<index_oid_t> index_oid_s_;
+  index_oid_t index_oid_;
   /** The catalog contains metadata required to locate index. */
   Catalog *catalog_;
 };

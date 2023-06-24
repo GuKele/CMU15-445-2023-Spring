@@ -28,6 +28,7 @@ DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *
 
 void DeleteExecutor::Init() {
   // throw NotImplementedException("DeleteExecutor is not implemented");
+  // std::cout << plan_->ToString() << std::endl;
   child_executor_->Init();
 }
 
@@ -52,8 +53,9 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       index_info->index_->DeleteEntry(key_tuple, delete_rid, exec_ctx_->GetTransaction());
     }
 
-    exec_ctx_->GetTransaction()->AppendIndexWriteRecord(IndexWriteRecord(
-        delete_rid, plan_->TableOid(), WType::DELETE, {}, delete_tuple, {}, exec_ctx_->GetCatalog()));
+    IndexWriteRecord index_write_record(delete_rid, plan_->TableOid(), WType::DELETE, {}, {}, exec_ctx_->GetCatalog());
+    index_write_record.old_tuple_ = delete_tuple;
+    exec_ctx_->GetTransaction()->AppendIndexWriteRecord(index_write_record);
 
     ++delete_cnt;
   }

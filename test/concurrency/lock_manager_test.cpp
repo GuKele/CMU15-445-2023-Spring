@@ -2,7 +2,6 @@
  * lock_manager_test.cpp
  */
 
-#include <chrono>
 #include <exception>
 #include <random>
 #include <thread>  // NOLINT
@@ -368,7 +367,7 @@ void MutipleRowLockUpgradeTest1() {
     } catch (const std::exception &e) {
       txn_mgr.Abort(txns[txn_id]);
       std::cout << e.what() << " " << txn_id << " 锁升级冲突 " << std::endl;
-    };
+    }
   };
 
   std::vector<std::thread> threads;

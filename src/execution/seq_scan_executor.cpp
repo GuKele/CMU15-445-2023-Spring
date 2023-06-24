@@ -19,8 +19,12 @@
 #include "common/rid.h"
 #include "concurrency/lock_manager.h"
 #include "concurrency/transaction.h"
+#include "execution/expressions/comparison_expression.h"
 #include "storage/table/table_iterator.h"
 #include "storage/table/tuple.h"
+#include "type/type.h"
+#include "type/value.h"
+#include "type/value_factory.h"
 
 namespace bustub {
 
@@ -108,29 +112,34 @@ void SeqScanExecutor::Init() {
  */
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  if (!iterator_.has_value()) {
+    throw Exception(ExceptionType::EXECUTION, "std::optional iterator should have value");
+  }
   auto &iter = iterator_.value();
   auto txn = exec_ctx_->GetTransaction();
-  auto oid = plan_->TableOid();
+  auto scan_oid = plan_->TableOid();
 
   while (!iter.IsEnd()) {
+    auto scan_rid = iter.GetRID();
     // 加锁
     auto lock_mode = LockManager::LockMode::SHARED;
-    // bool is_this_executor_get_shared_row = false; //表示是否是由本算子加上的shared_row
+    bool is_this_executor_get_row_lock = false;  // 表示是否是由本算子加上的lock
     try {
       if (exec_ctx_->IsDelete()) {  // 写锁
         lock_mode = LockManager::LockMode::EXCLUSIVE;
-        if (!txn->IsRowExclusiveLocked(oid, iter.GetRID())) {
-          if (!exec_ctx_->GetLockManager()->LockRow(txn, lock_mode, oid, iter.GetRID())) {
+        if (!txn->IsRowExclusiveLocked(scan_oid, scan_rid)) {
+          if (!exec_ctx_->GetLockManager()->LockRow(txn, lock_mode, scan_oid, scan_rid)) {
             throw ExecutionException("seq scan lock row X failed");
           }
+          is_this_executor_get_row_lock = true;
         }
       } else {  // 读锁
         if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-          if (!txn->IsRowSharedLocked(oid, iter.GetRID()) && !txn->IsRowExclusiveLocked(oid, iter.GetRID())) {
-            if (!exec_ctx_->GetLockManager()->LockRow(txn, lock_mode, oid, iter.GetRID())) {
+          if (!txn->IsRowSharedLocked(scan_oid, scan_rid) && !txn->IsRowExclusiveLocked(scan_oid, scan_rid)) {
+            if (!exec_ctx_->GetLockManager()->LockRow(txn, lock_mode, scan_oid, scan_rid)) {
               throw ExecutionException("seq scan lock row S failed");
             }
-            // is_this_executor_get_shared_row = true;
+            is_this_executor_get_row_lock = true;
           }
         }
       }
@@ -138,13 +147,14 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       throw ExecutionException("seq scan TransactionAbort");
     }
 
-    auto [tuple_meta, tup] = iter.GetTuple();
+    auto [scan_tuple_meta, scan_tuple] = iter.GetTuple();
+    ++iter;
 
     // 释放锁 RC下 row S 锁可以直接释放吧。
     try {
-      if (txn->IsRowSharedLocked(oid, iter.GetRID()) && txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
-        BUSTUB_ASSERT(txn->IsRowSharedLocked(oid, iter.GetRID()), "RC do not hold S row ??");
-        if (!exec_ctx_->GetLockManager()->UnlockRow(txn, oid, iter.GetRID())) {
+      if (txn->IsRowSharedLocked(scan_oid, scan_rid) && txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+        BUSTUB_ASSERT(txn->IsRowSharedLocked(scan_oid, scan_rid), "RC do not hold S row ??");
+        if (!exec_ctx_->GetLockManager()->UnlockRow(txn, scan_oid, scan_rid)) {
           throw ExecutionException("seq scan unlock row S failed");
         }
       }
@@ -152,7 +162,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       throw ExecutionException("seq scan TransactionAbort");
     }
 
-    if (!tuple_meta.is_deleted_) {
+    if (!scan_tuple_meta.is_deleted_) {
       // TODO(gukele): if you have implemented filter pushdown to scan, check the predicate.
       // 如果不符合谓词，那么即使是RR也使用UnlockRow(force = true)？？？？
       // 那如果是事物中别的算子加的读锁呢
@@ -163,21 +173,37 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       //     }
       //   }
       // }
-      *tuple = std::move(tup);
-      *rid = tuple->GetRid();
-      ++iter;
-      return true;
+
+      if (plan_->filter_predicate_) {
+        // std::cout << plan_->filter_predicate_->ToString() << std::endl;optimizer_custom_rules.cpp
+        auto value = plan_->filter_predicate_->Evaluate(&scan_tuple, plan_->OutputSchema());
+        if (!value.IsNull() && value.GetAs<bool>()) {
+          *rid = scan_rid;
+          *tuple = std::move(scan_tuple);
+          return true;
+        }
+        // 不满足filter的，并且本executor得到的行锁，并且不是之前已经释放了的RC下S锁
+        if (is_this_executor_get_row_lock && !(txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED &&
+                                               lock_mode == LockManager::LockMode::SHARED)) {
+          try {
+            if (!exec_ctx_->GetLockManager()->UnlockRow(txn, scan_oid, scan_rid, true)) {
+              throw ExecutionException("Force unlocking of S lock on row that do not meet the filter failed");
+            }
+          } catch (const std::exception &) {
+            throw ExecutionException("seq scan TransactionAbort");
+          }
+        }
+      } else {
+        *rid = scan_rid;
+        *tuple = std::move(scan_tuple);
+        return true;
+      }
     }
-    // TODO(gukele):
-    // else {
-    //   //被删的也应该UnlockRow(force = true)吧？
-    // }
-    ++iter;
   }
 
   // std::cout << plan_->OutputSchema().ToString() << std::endl;
 
-  // TODO(gukele): 如果是本算子加上的IS表锁，并且是读提交，检查无本表的读锁以后，应该直接释放IS表锁吧
+  // TODO(gukele): 如果是本算子加上的IS表锁，并且是RC，检查无本表的读锁以后，应该直接释放IS表锁吧
 
   return false;
 }
