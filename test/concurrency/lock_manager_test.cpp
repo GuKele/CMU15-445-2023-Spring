@@ -399,6 +399,7 @@ void TwoPLTest1() {
   EXPECT_TRUE(res);
 
   res = lock_mgr.UnlockTable(txn, oid);
+  EXPECT_TRUE(res);
   CheckGrowing(txn);
 
   res = lock_mgr.LockTable(txn, LockManager::LockMode::INTENTION_EXCLUSIVE, oid);

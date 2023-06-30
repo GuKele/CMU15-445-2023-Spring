@@ -227,7 +227,7 @@ auto BustubInstance::ExecuteSqlTxn(const std::string &sql, ResultWriter &writer,
 
   /*
    // TODO(gukele): 仔细研究一下具体的执行过程
-   // NOTE(gukele)
+   // NOTE(gukele):
    * 1. Parser
    * 2. Binder
    * 3. Planer
@@ -244,11 +244,12 @@ auto BustubInstance::ExecuteSqlTxn(const std::string &sql, ResultWriter &writer,
 
     bool is_delete = false;
 
+    // 处理Create table/index、Explain等
     switch (statement->type_) {
       case StatementType::CREATE_STATEMENT: {
         const auto &create_stmt = dynamic_cast<const CreateStatement &>(*statement);
         HandleCreateStatement(txn, create_stmt, writer);
-        continue;
+        continue;  // 跳入下一次循环，增改查删才会执行后边Plan、Optimize、Execute
       }
       case StatementType::INDEX_STATEMENT: {
         const auto &index_stmt = dynamic_cast<const IndexStatement &>(*statement);

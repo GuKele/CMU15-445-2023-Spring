@@ -34,7 +34,7 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
 void SeqScanExecutor::Init() {
   // throw NotImplementedException("SeqScanExecutor is not implemented");
   auto exec_ctx = GetExecutorContext();
-  auto table_info = exec_ctx->GetCatalog()->GetTable(plan_->TableOid());
+  auto table_info = exec_ctx->GetCatalog()->GetTable(plan_->GetTableOid());
   // TODO(gukele): figure out Halloween problem。
   // MakeIterator is introduced to avoid the Halloween problem in Project 3's
   // UpdateExecutor, but you do not need it now.
@@ -43,7 +43,7 @@ void SeqScanExecutor::Init() {
   // 但是好像因为历史问题，项目刚增加了意向锁的实现，所以目前使用意向锁+行锁来实现
   try {
     const auto txn = exec_ctx->GetTransaction();
-    const auto oid = plan_->TableOid();
+    const auto oid = plan_->GetTableOid();
     if (exec_ctx_->IsDelete()) {  // 写锁
       /*
        * If the current operation is delete (by checking executor context
@@ -52,18 +52,13 @@ void SeqScanExecutor::Init() {
        * the table and tuple as necessary in step 2.
        */
 
-      // TODO(gukele): 是否需要判断是否持有更高级的锁？从而避免反向锁升级
+      // 需要判断是否持有更高级的锁,从而避免反向锁升级
       if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid) &&
           !txn->IsTableExclusiveLocked(oid)) {
         if (!exec_ctx_->GetLockManager()->LockTable(txn, LockManager::LockMode::INTENTION_EXCLUSIVE, oid)) {
           throw ExecutionException("seq scan lock table IX failed");
         }
       }
-      // if(txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
-
-      // } else if (txn->GetIsolationLevel() == IsolationLevel::REPEATABLE_READ) {
-
-      // }
     } else {  // 读锁
       if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
         if (!txn->IsTableIntentionSharedLocked(oid) && !txn->IsTableIntentionExclusiveLocked(oid) &&
@@ -74,23 +69,6 @@ void SeqScanExecutor::Init() {
           }
         }
       }
-      // if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
-      //   if(!txn->IsTableIntentionSharedLocked(oid) && !txn->IsTableIntentionExclusiveLocked(oid) &&
-      //   !txn->IsTableSharedLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid) &&
-      //   !txn->IsTableExclusiveLocked(oid)) {
-      //     if (!exec_ctx_->GetLockManager()->LockTable(txn, LockManager::LockMode::INTENTION_SHARED, oid)) {
-      //       throw ExecutionException("seq scan lock table IS failed");
-      //     }
-      //   }
-      // } // TODO(gukele):REPEATABLE_READ应该是也加is？只不过行s锁不会提前释放
-      // else if (txn->GetIsolationLevel() == IsolationLevel::REPEATABLE_READ) {
-      //   if(!txn->IsTableSharedLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid) &&
-      //   !txn->IsTableExclusiveLocked(oid)) {
-      //     if (!exec_ctx_->GetLockManager()->LockTable(txn, LockManager::LockMode::SHARED, oid)) {
-      //       throw ExecutionException("seq scan lock table S failed");
-      //     }
-      //   }
-      // }
     }
   } catch (const TransactionAbortException &e) {
     throw ExecutionException("seq scan TransactionAbort");
@@ -117,7 +95,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   auto &iter = iterator_.value();
   auto txn = exec_ctx_->GetTransaction();
-  auto scan_oid = plan_->TableOid();
+  auto scan_oid = plan_->GetTableOid();
 
   while (!iter.IsEnd()) {
     auto scan_rid = iter.GetRID();
@@ -163,17 +141,6 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
 
     if (!scan_tuple_meta.is_deleted_) {
-      // TODO(gukele): if you have implemented filter pushdown to scan, check the predicate.
-      // 如果不符合谓词，那么即使是RR也使用UnlockRow(force = true)？？？？
-      // 那如果是事物中别的算子加的读锁呢
-      // if(/*不符合谓词*/) {
-      //   if(/*本算子加上的shared_lock*/) {
-      //     if(/*RR*/) {
-      //       UnlockRow(force = true);
-      //     }
-      //   }
-      // }
-
       if (plan_->filter_predicate_) {
         // std::cout << plan_->filter_predicate_->ToString() << std::endl;optimizer_custom_rules.cpp
         auto value = plan_->filter_predicate_->Evaluate(&scan_tuple, plan_->OutputSchema());

@@ -113,6 +113,13 @@ class Planner {
 
   void AddAggCallToContext(BoundExpression &expr);
 
+  /**
+   * @brief 生成AbstractExpressionRef
+   *
+   * @param expr
+   * @param children
+   * @return std::tuple<std::string, AbstractExpressionRef>
+   */
   auto PlanExpression(const BoundExpression &expr, const std::vector<AbstractPlanNodeRef> &children)
       -> std::tuple<std::string, AbstractExpressionRef>;
 

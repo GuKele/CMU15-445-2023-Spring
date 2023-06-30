@@ -180,7 +180,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitLeaf(LeafPage *leaf_node) -> LeafPage * {
   page_id_t right_bro_leaf_page_id;
   auto right_bro_leaf_guard = bpm_->NewPageGuarded(&right_bro_leaf_page_id);
-  if (right_bro_leaf_guard.IsVaild()) {
+  if (right_bro_leaf_guard.IsValid()) {
     auto right_bro_leaf_node = right_bro_leaf_guard.AsMut<LeafPage>();
     right_bro_leaf_node->Init(leaf_max_size_);
 
@@ -208,7 +208,7 @@ auto BPLUSTREE_TYPE::CreateNewTree(const KeyType &key, const ValueType &value, C
   auto header_node = header_page_guard.AsMut<BPlusTreeHeaderPage>();
   auto page = bpm_->NewPageGuarded(&header_node->root_page_id_);
 
-  if (!page.IsVaild()) {
+  if (!page.IsValid()) {
     throw Exception(ExceptionType::OUT_OF_MEMORY, "Cannot allocate new page");
     return false;
   }
@@ -252,7 +252,7 @@ auto BPLUSTREE_TYPE::CreateNewRoot(const page_id_t &left, const KeyType &key, co
   page_id_t new_root_page_id = INVALID_PAGE_ID;
   auto new_root_guard = bpm_->NewPageGuarded(&new_root_page_id);
 
-  if (!new_root_guard.IsVaild()) {
+  if (!new_root_guard.IsValid()) {
     throw Exception(ExceptionType::OUT_OF_MEMORY, "Cannot allocate new page");
     return false;
   }
@@ -272,7 +272,7 @@ auto BPLUSTREE_TYPE::InsertAndSplitInternal(InternalPage *i_node, const KeyType 
     -> std::pair<KeyType, page_id_t> {
   page_id_t right_bro_internal_page_id = INVALID_PAGE_ID;
   auto right_bro_internal_page_guard = bpm_->NewPageGuarded(&right_bro_internal_page_id);
-  if (!right_bro_internal_page_guard.IsVaild()) {
+  if (!right_bro_internal_page_guard.IsValid()) {
     throw Exception(ExceptionType::OUT_OF_MEMORY, "Cannot allocate new page");
     return {KeyType(), INVALID_PAGE_ID};
   }
@@ -428,7 +428,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
       }
     }
     // 4.3 merge to 左兄弟
-    if (left_bro_page_guard.IsVaild()) {
+    if (left_bro_page_guard.IsValid()) {
       auto left_bro_leaf_node = left_bro_page_guard.AsMut<LeafPage>();
       // leaf_node->MoveTo(0, leaf_node->GetSize(), left_bro_leaf_node, left_bro_leaf_node->GetSize());
       leaf_node->MergeToLeftBro(left_bro_leaf_node);
@@ -436,7 +436,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
       return;
     }
     // 4.4 右兄弟 merge to
-    if (right_bro_page_guard.IsVaild()) {
+    if (right_bro_page_guard.IsValid()) {
       auto right_bro_leaf_node = right_bro_page_guard.AsMut<LeafPage>();
       right_bro_leaf_node->MergeToLeftBro(leaf_node);
       DeleteFromParent(index + 1, &ctx);
@@ -507,7 +507,7 @@ void BPLUSTREE_TYPE::DeleteFromParent(int index, Context *context) {
       }
     }
     // 3.3 merge to 左兄弟
-    if (left_bro_page_guard.IsVaild()) {
+    if (left_bro_page_guard.IsValid()) {
       auto left_bro_i_node = left_bro_page_guard.AsMut<InternalPage>();
       i_node->SetKeyAt(0, father_node->KeyAt(pos));
       i_node->MergeToLeftBro(left_bro_i_node);
@@ -515,7 +515,7 @@ void BPLUSTREE_TYPE::DeleteFromParent(int index, Context *context) {
       return;
     }
     // 4.4 右兄弟 merge to
-    if (right_bro_page_guard.IsVaild()) {
+    if (right_bro_page_guard.IsValid()) {
       auto right_bro_i_node = right_bro_page_guard.AsMut<InternalPage>();
       right_bro_i_node->SetKeyAt(0, father_node->KeyAt(pos + 1));
       right_bro_i_node->MergeToLeftBro(i_node);
@@ -551,11 +551,14 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
   Context ctx;
   if (auto leaf_node = FindLeafForRead(key, &ctx); leaf_node != nullptr) {
-    // TODO(gukele) 返回第一个大于等于key的iterator？
+    // FIXME(gukele): 目前是返回第一个大于等于key的iterator，应该是正确的
     int index = -1;
     leaf_node->IndexOfKey(key, comparator_, &index);
     assert(!ctx.read_set_.empty());
-    return INDEXITERATOR_TYPE(std::move(ctx.read_set_.back()), bpm_, index);
+    // BUG(gukele): 如果是最后一叶，并且还是比最后一个槽还大，实际上就是b+树的end索引了,已经修复
+    if (leaf_node->GetNextPageId() != INVALID_PAGE_ID && index != leaf_node->GetSize()) {
+      return INDEXITERATOR_TYPE(std::move(ctx.read_set_.back()), bpm_, index);
+    }
   }
   return INDEXITERATOR_TYPE();
 }
@@ -821,6 +824,7 @@ auto BPLUSTREE_TYPE::ToPrintableBPlusTree(page_id_t root_id) -> PrintableBPlusTr
   return proot;
 }
 
+// 模板提前实例化
 template class BPlusTree<GenericKey<4>, RID, GenericComparator<4>>;
 
 template class BPlusTree<GenericKey<8>, RID, GenericComparator<8>>;

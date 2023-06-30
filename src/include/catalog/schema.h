@@ -26,6 +26,10 @@ namespace bustub {
 class Schema;
 using SchemaRef = std::shared_ptr<const Schema>;
 
+/**
+ * @brief 存储了每个列的信息，对应一个表或者一个executor output(tuple)的schema，
+ *
+ */
 class Schema {
  public:
   /**

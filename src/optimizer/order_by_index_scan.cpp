@@ -54,22 +54,25 @@ auto Optimizer::OptimizeOrderByAsIndexScan(const AbstractPlanNodeRef &plan) -> A
 
     if (child_plan->GetType() == PlanType::SeqScan) {
       const auto &seq_scan = dynamic_cast<const SeqScanPlanNode &>(*child_plan);
-      const auto *table_info = catalog_.GetTable(seq_scan.TableOid());
+      const auto *table_info = catalog_.GetTable(seq_scan.GetTableOid());
       const auto indices = catalog_.GetTableIndexes(table_info->name_);
 
       for (const auto *index : indices) {
         const auto &columns = index->key_schema_.GetColumns();
         // check index key schema == order by columns
         bool valid = true;
-        if (columns.size() == order_by_column_ids.size()) {
-          for (size_t i = 0; i < columns.size(); i++) {
+        // TODO(gukele): 大于也可以吧比如索引(a, b, c)，排序(a, b)也可以用索引啊
+        // if (columns.size() == order_by_column_ids.size()) {
+        if (columns.size() >= order_by_column_ids.size()) {
+          for (size_t i = 0; i < order_by_column_ids.size(); i++) {
             if (columns[i].GetName() != table_info->schema_.GetColumn(order_by_column_ids[i]).GetName()) {
               valid = false;
               break;
             }
           }
           if (valid) {
-            return std::make_shared<IndexScanPlanNode>(optimized_plan->output_schema_, index->index_oid_);
+            return std::make_shared<IndexScanPlanNode>(optimized_plan->output_schema_, index->index_oid_, index->name_,
+                                                       order_by_column_ids.size());
           }
         }
       }

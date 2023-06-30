@@ -12,10 +12,13 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "catalog/catalog.h"
 #include "common/rid.h"
+#include "concurrency/transaction.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/index_scan_plan.h"
@@ -47,8 +50,13 @@ class IndexScanExecutor : public AbstractExecutor {
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
+  table_oid_t table_oid_;
   // BPlusTreeIndexForTwoIntegerColumn *tree_;
+
   TableInfo *table_info_;
+  // FIXME(gukele): 索引扫描如何加锁！这里直接没有考虑并发的情况
+  // 开闭区间[iter_, iter_end_)
   BPlusTreeIndexIteratorForTwoIntegerColumn iter_;
+  BPlusTreeIndexIteratorForTwoIntegerColumn iter_end_;
 };
 }  // namespace bustub

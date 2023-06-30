@@ -61,7 +61,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   Tuple insert_tuple{};
   RID insert_rid{};
   auto insert_table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
-  auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(insert_table_info->name_);
+  auto indexes_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(insert_table_info->name_);
   auto txn = exec_ctx_->GetTransaction();
   auto oid = plan_->TableOid();
 
@@ -82,10 +82,14 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     } else {
       throw Exception(ExceptionType::OUT_OF_RANGE, "Insert Error");
     }
-    for (auto index_info : indexs_info) {
+    for (auto index_info : indexes_info) {
       auto key_tuple = insert_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                  index_info->index_->GetKeyAttrs());
-      index_info->index_->InsertEntry(key_tuple, insert_rid, txn);
+      auto succeed = index_info->index_->InsertEntry(key_tuple, insert_rid, txn);
+      // FIXME(gukele): 索引插入失败abort事务？事务记录应该吧index和tuple分开！
+      if (!succeed) {
+        txn->SetState(TransactionState::ABORTED);
+      }
     }
     ++insert_cnt;
   }

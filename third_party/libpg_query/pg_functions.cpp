@@ -109,6 +109,7 @@ void pg_parser_cleanup() {
 
 int ereport(int code, ...) {
 	std::string err = "parser error : " + std::string(pg_parser_state.pg_err_msg);
+
 	throw std::runtime_error(err);
 }
 void elog(int code, const char *fmt, ...) {

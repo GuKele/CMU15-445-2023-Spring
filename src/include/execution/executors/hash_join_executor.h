@@ -67,7 +67,7 @@ class HashJoinExecutor : public AbstractExecutor {
   std::unique_ptr<AbstractExecutor> right_executor_;
   std::unordered_multimap<hash_t, Tuple> right_tuples_map_;
   std::vector<Tuple> output_tuples_;
-  std::size_t index_{0};
+  std::size_t cursor_{0};
 };
 
 }  // namespace bustub

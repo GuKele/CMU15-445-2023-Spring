@@ -15,8 +15,10 @@
 #pragma once
 #include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
+#include "common/exception.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/b_plus_tree_page.h"
+#include "storage/page/hash_table_page_defs.h"
 #include "storage/page/page_guard.h"
 
 namespace bustub {
@@ -45,11 +47,17 @@ class IndexIterator {
 
   auto operator*() -> const MappingType &;
 
+  auto operator->() -> const MappingType *;
+
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool {
+  auto operator==(const IndexIterator &iter) const -> bool {
     // throw std::runtime_error("unimplemented");
-    return (index_ == itr.index_ && leaf_node_ == itr.leaf_node_);
+    return (index_ == iter.index_ && leaf_node_ == iter.leaf_node_);
+  }
+
+  auto operator<(const IndexIterator &iter) const -> bool {
+    throw Exception(ExceptionType::EXECUTION, "IndexIterator operator<() not implemented");
   }
 
   auto operator!=(const IndexIterator &itr) const -> bool {
@@ -62,7 +70,7 @@ class IndexIterator {
   int index_{-1};
   const LeafPage *leaf_node_{nullptr};
   BufferPoolManager *bpm_;
-  // TODO(gukele) should the itetator hold PageGuard？
+  // TODO(gukele): should the iterator hold PageGuard？
   ReadPageGuard guard_;
 };
 

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <string>
 
@@ -29,6 +30,14 @@ class HashUtil {
   static const hash_t PRIME_FACTOR = 10000019;
 
  public:
+  /**
+   * @brief 可以当作hash_combine使用，下面的CombineHashes也是调用HashBytes
+   * // TODO(gukele): 以后学习一下boost::hash_combine
+   *
+   * @param bytes
+   * @param length
+   * @return hash_t
+   */
   static inline auto HashBytes(const char *bytes, size_t length) -> hash_t {
     // https://github.com/greenplum-db/gpos/blob/b53c1acd6285de94044ff91fbee91589543feba1/libgpos/src/utils.cpp#L126
     hash_t hash = length;

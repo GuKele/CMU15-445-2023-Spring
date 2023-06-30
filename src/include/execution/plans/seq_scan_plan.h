@@ -45,7 +45,7 @@ class SeqScanPlanNode : public AbstractPlanNode {
   auto GetType() const -> PlanType override { return PlanType::SeqScan; }
 
   /** @return The identifier of the table that should be scanned */
-  auto TableOid() const -> table_oid_t { return table_oid_; }
+  auto GetTableOid() const -> table_oid_t { return table_oid_; }
 
   static auto InferScanSchema(const BoundBaseTableRef &table_ref) -> Schema;
 
@@ -57,9 +57,10 @@ class SeqScanPlanNode : public AbstractPlanNode {
   /** The table name */
   std::string table_name_;
 
-  /** The predicate to filter in seqscan. It will ALWAYS be nullptr unless you enable the MergeFilterScan rule.
-      You don't need to handle it to get a perfect score in project 3 in Spring 2023.
-  */
+  /**
+   * The predicate to filter in seq scan. It will ALWAYS be nullptr unless you enable the MergeFilterScan rule.
+   * You don't need to handle it to get a perfect score in project 3 in Spring 2023.
+   */
   AbstractExpressionRef filter_predicate_;
 
  protected:

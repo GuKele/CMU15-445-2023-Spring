@@ -165,6 +165,8 @@ auto GetSizeOf(const MockScanPlanNode *plan) -> size_t {
 
   if (table == "__mock_t1") {
     return 1000000;
+    // FIXME(gukele): 上边是原来的
+    // return 10000;
   }
 
   if (table == "__mock_t4_1m" || table == "__mock_t5_1m" || table == "__mock_t6_1m") {

@@ -41,6 +41,9 @@ class BPlusTreeIndex : public Index {
 
   auto GetEndIterator() -> INDEXITERATOR_TYPE;
 
+  // TODO(gukele): 增加获得comparator的接口;
+  auto GetComparator() const -> const KeyComparator &;
+
  protected:
   // comparator for key
   KeyComparator comparator_;

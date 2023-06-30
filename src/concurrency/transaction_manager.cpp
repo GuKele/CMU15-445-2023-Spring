@@ -50,16 +50,16 @@ void TransactionManager::Abort(Transaction *txn) {
 
     if (item.wtype_ == WType::INSERT) {
       table.UpdateTupleMeta(TupleMeta{INVALID_TXN_ID, INVALID_TXN_ID, true}, rid);
-      const auto indexs_info = item.catalog_->GetTableIndexes(table_info->name_);
-      for (const auto &index_info : indexs_info) {
+      const auto indexes_info = item.catalog_->GetTableIndexes(table_info->name_);
+      for (const auto &index_info : indexes_info) {
         auto new_key_tuple =
             new_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
         index_info->index_->DeleteEntry(new_key_tuple, rid, txn);
       }
     } else if (item.wtype_ == WType::DELETE) {
       table.UpdateTupleMeta(TupleMeta{INVALID_TXN_ID, INVALID_TXN_ID, false}, rid);
-      const auto indexs_info = item.catalog_->GetTableIndexes(table_info->name_);
-      for (const auto &index_info : indexs_info) {
+      const auto indexes_info = item.catalog_->GetTableIndexes(table_info->name_);
+      for (const auto &index_info : indexes_info) {
         auto old_key_tuple =
             old_tuple.KeyFromTuple(table_info->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs());
         index_info->index_->InsertEntry(old_key_tuple, rid, txn);

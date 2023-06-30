@@ -67,7 +67,7 @@ class BasicPageGuard {
    * @brief 判读guard是否是一个有效的guard
    *
    */
-  auto IsVaild() const -> bool { return page_ != nullptr; }
+  auto IsValid() const -> bool { return page_ != nullptr; }
 
   auto PageId() const -> page_id_t { return page_->GetPageId(); }
 
@@ -156,7 +156,7 @@ class ReadPageGuard {
    */
   ~ReadPageGuard();
 
-  auto IsVaild() const -> bool { return guard_.IsVaild(); }
+  auto IsValid() const -> bool { return guard_.IsValid(); }
 
   auto PageId() const -> page_id_t { return guard_.PageId(); }
 
@@ -226,7 +226,7 @@ class WritePageGuard {
    */
   ~WritePageGuard();
 
-  auto IsVaild() const -> bool { return guard_.IsVaild(); }
+  auto IsValid() const -> bool { return guard_.IsValid(); }
 
   auto PageId() -> page_id_t { return guard_.PageId(); }
 

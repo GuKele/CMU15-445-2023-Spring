@@ -1,4 +1,3 @@
-#include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -76,7 +75,7 @@ class B {
   B(A a, int n) : a_{std::move(a)} { std::cout << "B ctor" << std::endl; }
 
   B(const B &that) { std::cout << "B copy ctor" << std::endl; }
-  B(B &&that) noexcept { std::cout << "B move ctor" << std::endl; }
+  // B(B &&that) noexcept { std::cout << "B move ctor" << std::endl; }
 
  private:
   A a_;
@@ -84,7 +83,7 @@ class B {
 
 B Func() {
   A a(7);
-  return {a, 0};  // 想知道 这个a会不会被移动过去,事实上a是被copy ctor到B构造函数的形参中
+  return {a, 0};  // 想知道 这个a会不会被移动过去,事实上a是被copy ctor到B构造函数的形参中,这个a会当作左值，NRVO构造B对象
 }
 
 B Func2() {
@@ -92,9 +91,13 @@ B Func2() {
   return {std::move(a), 0};
 }
 
-TEST(RVOTest, DISABLED_RVOTest1) {
-  // Func();
-  Func2();
+void Func3(const A &a) {}
+
+TEST(RVOTest, RVOTest1) {
+  // [[maybe_unused]] auto b = Func();
+  [[maybe_unused]] auto b = Func2();
+  // A a;
+  // Func3(std::move(a));
 }
 
 }  // namespace bustub

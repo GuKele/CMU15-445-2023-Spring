@@ -47,6 +47,7 @@ auto Planner::PlanSelect(const SelectStatement &statement) -> AbstractPlanNodeRe
           std::vector<std::vector<AbstractExpressionRef>>{std::vector<AbstractExpressionRef>{}});
       break;
     default:
+      // For a BaseTableRef, PlanTableRef will return a `SeqScanPlanNode`
       plan = PlanTableRef(*statement.table_);
       break;
   }

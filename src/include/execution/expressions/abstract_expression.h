@@ -13,6 +13,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -80,6 +81,15 @@ class AbstractExpression {
   /** @return a new expression with new children */
   virtual auto CloneWithChildren(std::vector<AbstractExpressionRef> children) const
       -> std::unique_ptr<AbstractExpression> = 0;
+
+  // TODO(gukele): 提供GetAs()接口
+  template <typename T>
+  auto GetAs() -> std::optional<T *> {
+    if (auto ptr = dynamic_cast<T *>(this); ptr != nullptr) {
+      return {ptr};
+    }
+    return std::nullopt;
+  }
 
   /** The children of this expression. Note that the order of appearance of children may matter. */
   std::vector<AbstractExpressionRef> children_;

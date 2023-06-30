@@ -25,7 +25,9 @@ namespace bustub {
  * This key type uses an fixed length array to hold data for indexing
  * purposes, the actual size of which is specified and instantiated
  * with a template argument.
- * 以字节的形式来处理key-tuple
+ * 应该是为了防止BPlusTree模板代码膨胀，同时Tuple又无法编译期获取其data真正的长度，Tuple是使用vector<char>存储的data，
+ * 但是在索引中应该将data存在index page中，所以又嵌套了一层GenericKey，data放在char[]中，编译期可知data长度，
+ * 同样使用Schema就可以解析
  */
 template <size_t KeySize>
 class GenericKey {

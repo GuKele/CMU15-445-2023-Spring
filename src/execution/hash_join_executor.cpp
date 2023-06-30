@@ -42,7 +42,7 @@ void HashJoinExecutor::Init() {
   right_executor_->Init();
   right_tuples_map_.clear();
   output_tuples_.clear();
-  index_ = 0;
+  cursor_ = 0;
 
   // std::cout << "hash join!!!!" << std::endl;
   // std::cout << plan_->ToString() << std::endl;
@@ -59,7 +59,6 @@ void HashJoinExecutor::Init() {
     }
     auto hash_value = HashValues(values);
     right_tuples_map_.insert({hash_value, tuple});
-    std::unordered_multimap<int, int> maptest;
   }
 
   while (left_executor_->Next(&tuple, &rid)) {
@@ -105,8 +104,8 @@ void HashJoinExecutor::Init() {
 }
 
 auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  while (index_ < output_tuples_.size()) {
-    *tuple = output_tuples_[index_++];
+  while (cursor_ < output_tuples_.size()) {
+    *tuple = output_tuples_[cursor_++];
     return true;
   }
   return false;

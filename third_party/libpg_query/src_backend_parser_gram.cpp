@@ -19307,7 +19307,7 @@ yyreduce:
 				n->function = NULL;
 				n->query = (yyvsp[(8) - (8)].node);
 				(yyval.node) = (PGNode *)n;
-				
+
 			;}
     break;
 

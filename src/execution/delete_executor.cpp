@@ -37,7 +37,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     return false;
   }
   auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
-  auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
+  auto indexes_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
   Tuple delete_tuple{};
   RID delete_rid{};
 
@@ -47,7 +47,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // meta.is_deleted_ = true;
     table_info->table_->UpdateTupleMeta(meta, delete_rid);
 
-    for (const auto &index_info : indexs_info) {
+    for (const auto &index_info : indexes_info) {
       auto key_tuple = delete_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                  index_info->index_->GetKeyAttrs());
       index_info->index_->DeleteEntry(key_tuple, delete_rid, exec_ctx_->GetTransaction());

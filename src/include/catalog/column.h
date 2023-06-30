@@ -26,6 +26,10 @@
 namespace bustub {
 class AbstractExpression;
 
+/**
+ * @brief 记录一列的名字、数据类型、在Tuple起始位置
+ *
+ */
 class Column {
   friend class Schema;
 

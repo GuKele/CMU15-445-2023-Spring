@@ -45,7 +45,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   }
 
   auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid());
-  auto indexs_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
+  auto indexes_info = GetExecutorContext()->GetCatalog()->GetTableIndexes(table_info->name_);
   Tuple old_tuple{};
   RID old_rid{};
 
@@ -69,7 +69,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // delete old and insert new
     // 只更新改变了的索引
     std::vector<index_oid_t> index_oid_s;
-    for (auto index_info : indexs_info) {
+    for (auto index_info : indexes_info) {
       bool change = false;
       for (auto key_attr : index_info->index_->GetKeyAttrs()) {
         if (diff_key_attrs.count(key_attr) == 1) {
@@ -85,8 +85,11 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
         auto new_key_tuple = new_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
                                                     index_info->index_->GetKeyAttrs());
-        index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
-
+        auto succeed = index_info->index_->InsertEntry(new_key_tuple, old_rid, exec_ctx_->GetTransaction());
+        // FIXME(gukele): 索引插入失败abort事务？事务记录应该吧index和tuple分开！
+        if (!succeed) {
+          GetExecutorContext()->GetTransaction()->SetState(TransactionState::ABORTED);
+        }
         IndexWriteRecord index_write_record(old_rid, plan_->TableOid(), WType::UPDATE, new_tuple,
                                             index_info->index_oid_, exec_ctx_->GetCatalog());
         index_write_record.old_tuple_ = old_tuple;

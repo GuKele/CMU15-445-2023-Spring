@@ -21,6 +21,7 @@ auto Optimizer::OptimizeMergeProjection(const AbstractPlanNodeRef &plan) -> Abst
     // Has exactly one child
     BUSTUB_ENSURE(optimized_plan->children_.size() == 1, "Projection with multiple children?? That's weird!");
     // If the schema is the same (except column name)
+    // 实际上只是判断了是否每一个column的类型都相同,name直接使用上层projection plan node的output schema就行了
     const auto &child_plan = optimized_plan->children_[0];
     const auto &child_schema = child_plan->OutputSchema();
     const auto &projection_schema = projection_plan.OutputSchema();
@@ -32,19 +33,20 @@ auto Optimizer::OptimizeMergeProjection(const AbstractPlanNodeRef &plan) -> Abst
                      return child_col.GetType() == proj_col.GetType();
                    })) {
       const auto &exprs = projection_plan.GetExpressions();
-      // If all items are column value expressions
-      bool is_identical = true;
+      // If all items are column value expressions && is identical project
+      bool is_identical_project = true;
       for (size_t idx = 0; idx < exprs.size(); idx++) {
         auto column_value_expr = dynamic_cast<const ColumnValueExpression *>(exprs[idx].get());
         if (column_value_expr != nullptr) {
+          // TODO(gukele): why using column_value_expr->GetTupleIdx() == 0;
           if (column_value_expr->GetTupleIdx() == 0 && column_value_expr->GetColIdx() == idx) {
             continue;
           }
         }
-        is_identical = false;
+        is_identical_project = false;
         break;
       }
-      if (is_identical) {
+      if (is_identical_project) {
         auto plan = child_plan->CloneWithChildren(child_plan->GetChildren());
         plan->output_schema_ = std::make_shared<Schema>(projection_schema);
         return plan;

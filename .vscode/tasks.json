@@ -79,8 +79,9 @@
         // "shell",
         // "p3.03-update_test",
         // "lock_manager_test",
-        "deadlock_detection_test",
+        // "deadlock_detection_test",
         // "txn_integration_test",
+        "shell",
         "-j8",
       ],
       "options": {

@@ -9,6 +9,9 @@ INSERT INTO t1 SELECT * FROM __mock_t1;
 ----
 1000000
 
+// FIXME(gukele): 上边是原来的
+10000
+
 statement ok
 explain (o) select * from t1 where x >= 90 and y = 10;
 

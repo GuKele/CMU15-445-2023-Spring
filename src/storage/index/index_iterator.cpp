@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "common/config.h"
+#include "common/macros.h"
 #include "storage/index/index_iterator.h"
 #include "storage/page/page_guard.h"
 
@@ -22,7 +23,7 @@ INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(ReadPageGuard &&guard, BufferPoolManager *bpm, int index)
     : index_(index), bpm_{bpm}, guard_{std::move(guard)} {
-  if (guard_.IsVaild()) {
+  if (guard_.IsValid()) {
     leaf_node_ = guard_.As<LeafPage>();
   }
 }
@@ -30,7 +31,7 @@ INDEXITERATOR_TYPE::IndexIterator(ReadPageGuard &&guard, BufferPoolManager *bpm,
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(const IndexIterator &that)
     : index_{that.index_}, leaf_node_{that.leaf_node_}, bpm_{that.bpm_} {
-  if (that.guard_.IsVaild()) {
+  if (that.guard_.IsValid()) {
     guard_ = bpm_->FetchPageRead(that.guard_.PageId());
   }
 }
@@ -40,7 +41,7 @@ auto INDEXITERATOR_TYPE::operator=(const IndexIterator &that) -> IndexIterator &
   index_ = that.index_;
   leaf_node_ = that.leaf_node_;
   bpm_ = that.bpm_;
-  if (that.guard_.IsVaild()) {
+  if (that.guard_.IsValid()) {
     guard_ = bpm_->FetchPageRead(that.guard_.PageId());
   }
   return *this;
@@ -73,8 +74,20 @@ auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto INDEXITERATOR_TYPE::operator->() -> const MappingType * { return &this->operator*(); }
+
+INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   // throw std::runtime_error("unimplemented");
+
+  // 已经是end了
+  if (index_ == -1 && leaf_node_ == nullptr) {
+    // BUSTUB_ASSERT(leaf_node_ == nullptr, "End iterator should nullptr && index_ = -1");
+    index_ = -1;
+    leaf_node_ = nullptr;
+    return *this;
+  }
+
   if (index_ < leaf_node_->GetSize() - 1) {
     ++index_;
   } else if (auto next_page_id = leaf_node_->GetNextPageId(); next_page_id != INVALID_PAGE_ID) {
@@ -85,6 +98,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
     index_ = -1;
     leaf_node_ = nullptr;
   }
+
   return *this;
 }
 
