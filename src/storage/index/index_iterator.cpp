@@ -21,7 +21,7 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator(ReadPageGuard &&guard, BufferPoolManager *bpm, int index)
+INDEXITERATOR_TYPE::IndexIterator(BasicPageGuard &&guard, BufferPoolManager *bpm, int index)
     : index_(index), bpm_{bpm}, guard_{std::move(guard)} {
   if (guard_.IsValid()) {
     leaf_node_ = guard_.As<LeafPage>();
@@ -32,7 +32,7 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(const IndexIterator &that)
     : index_{that.index_}, leaf_node_{that.leaf_node_}, bpm_{that.bpm_} {
   if (that.guard_.IsValid()) {
-    guard_ = bpm_->FetchPageRead(that.guard_.PageId());
+    guard_ = bpm_->FetchPageBasic(that.guard_.PageId());
   }
 }
 
@@ -42,7 +42,7 @@ auto INDEXITERATOR_TYPE::operator=(const IndexIterator &that) -> IndexIterator &
   leaf_node_ = that.leaf_node_;
   bpm_ = that.bpm_;
   if (that.guard_.IsValid()) {
-    guard_ = bpm_->FetchPageRead(that.guard_.PageId());
+    guard_ = bpm_->FetchPageBasic(that.guard_.PageId());
   }
   return *this;
 }
@@ -91,7 +91,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   if (index_ < leaf_node_->GetSize() - 1) {
     ++index_;
   } else if (auto next_page_id = leaf_node_->GetNextPageId(); next_page_id != INVALID_PAGE_ID) {
-    guard_ = bpm_->FetchPageRead(next_page_id);
+    guard_ = bpm_->FetchPageBasic(next_page_id);
     leaf_node_ = guard_.As<LeafPage>();
     index_ = 0;
   } else {

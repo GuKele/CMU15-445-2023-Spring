@@ -29,9 +29,13 @@
       "name": "gdb",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/bin/bustub-shell", //可执行文件的路径和文件名称
+      "program": "${workspaceFolder}/build/bin/bustub-terrier-bench", //可执行文件的路径和文件名称
       "preLaunchTask": "make_test",
-      "args": [], //主函数调用时传入的参数
+      // "args": [], //主函数调用时传入的参数
+      "args": [
+        "--duration", "3000",
+        "--nft",  "1000",
+      ], //主函数调用时传入的参数
       "cwd": "${workspaceFolder}", //调试时的工作目录
       "MIMode": "gdb",
       "setupCommands": [

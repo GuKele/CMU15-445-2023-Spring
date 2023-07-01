@@ -58,7 +58,7 @@ class InsertExecutor : public AbstractExecutor {
   /** The insert plan node to be executed*/
   const InsertPlanNode *plan_;
   std::unique_ptr<AbstractExecutor> child_executor_;
-  bool is_end_{false};
+  bool is_insert_finished_{false};  // 一次init才能插入一次，不然上层算子会调用到InsertExecutor::Next返回false
 };
 
 }  // namespace bustub

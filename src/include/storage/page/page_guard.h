@@ -1,5 +1,6 @@
 #pragma once
 
+#include <utility>
 #include "storage/page/page.h"
 
 namespace bustub {
@@ -168,6 +169,12 @@ class ReadPageGuard {
     return guard_.As<T>();
   }
 
+  auto DecayToBasePageGuard() -> BasicPageGuard {
+    guard_.page_->RUnlatch();
+    BasicPageGuard result(std::move(guard_));
+    return result;
+  }
+
  private:
   inline void ClearAllContents() { guard_.ClearAllContents(); }
 
@@ -242,6 +249,12 @@ class WritePageGuard {
   template <class T>
   auto AsMut() -> T * {
     return guard_.AsMut<T>();
+  }
+
+  auto DecayToBasePageGuard() -> BasicPageGuard {
+    guard_.page_->WUnlatch();
+    BasicPageGuard result(std::move(guard_));
+    return result;
   }
 
  private:

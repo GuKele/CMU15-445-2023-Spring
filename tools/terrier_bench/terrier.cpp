@@ -12,12 +12,16 @@
 #include "binder/binder.h"
 #include "common/bustub_instance.h"
 #include "common/exception.h"
+#include "common/macros.h"
+#include "common/rid.h"
 #include "common/util/string_util.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
 #include "fmt/core.h"
 #include "fmt/std.h"
+#include "storage/index/b_plus_tree_index.h"
 #include "terrier_bench_config.h"
+#include "type/value_factory.h"
 
 #include <sys/time.h>
 
@@ -27,7 +31,10 @@ auto ClockMs() -> uint64_t {
   return static_cast<uint64_t>(tm.tv_sec * 1000) + static_cast<uint64_t>(tm.tv_usec / 1000);
 }
 
+// NOTE(gukele): 修改回来
 static const size_t BUSTUB_TERRIER_THREAD = 2;
+// static const size_t BUSTUB_TERRIER_THREAD = 1;
+
 static const size_t BUSTUB_TERRIER_CNT = 100;
 
 struct TerrierTotalMetrics {
@@ -264,6 +271,15 @@ auto main(int argc, char **argv) -> int {
             auto terrier_id = terrier_uniform_dist(gen);
             bool txn_success = true;
 
+            // std::vector<bustub::Value> values{bustub::ValueFactory::GetIntegerValue(nft_id)};
+            // auto key_schema = bustub->catalog_->GetIndex(0)->key_schema_;
+            // bustub::Tuple key_tuple(values, &key_schema);
+            // // bustub::IntegerKeyType index_key;
+            // // index_key.SetFromKey(key_tuple);
+            // std::vector<bustub::RID> result;
+            // std::cout << "nul_id=" << nft_id << " key value=" << values.front().ToString() << std::endl;
+
+
             if (verbose) {
               fmt::print("begin: thread {} update nft {} to terrier {}\n", thread_id, nft_id, terrier_id);
             }
@@ -276,7 +292,7 @@ auto main(int argc, char **argv) -> int {
               }
 
               if (txn_success && ss.str() != "1\t\n") {
-                fmt::print("unexpected result \"{}\",\n", ss.str());
+                fmt::print("update ss unexpected result \"{}\",\n", ss.str());
                 exit(1);
               }
 
@@ -297,8 +313,16 @@ auto main(int argc, char **argv) -> int {
                 txn_success = false;
               }
 
+
+              // bustub->catalog_->GetIndex(0)->index_->ScanKey(key_tuple, &result, nullptr);
+              // if(!result.empty()) {
+              //   std::cout << "size : " << result.size() << std::endl;
+              // }
+              // BUSTUB_ASSERT(result.empty(), "delete后不应该还有该行的索引");
+
+
               if (txn_success && ss.str() != "1\t\n") {
-                fmt::print("unexpected result \"{}\",\n", ss.str());
+                fmt::print("delete ss unexpected result \"{}\",\n", ss.str());
                 exit(1);
               }
 
@@ -313,9 +337,13 @@ auto main(int argc, char **argv) -> int {
                 }
 
                 if (txn_success && ss.str() != "1\t\n1\t\n") {
-                  fmt::print("unexpected result \"{}\",\n", ss.str());
+                  fmt::print("insert ss unexpected result \"{}\",\n", ss.str());
                   exit(1);
                 }
+
+                // result.clear();
+                // bustub->catalog_->GetIndex(0)->index_->ScanKey(key_tuple, &result, nullptr);
+                // BUSTUB_ASSERT(result.size() == 1, "insert后应该有该行的索引");
 
                 if (!txn_success) {
                   bustub->txn_manager_->Abort(txn);
@@ -409,6 +437,8 @@ auto main(int argc, char **argv) -> int {
           all_nfts_integer.push_back(std::stoi(nft));
         }
         std::sort(all_nfts_integer.begin(), all_nfts_integer.end());
+        // TODO(gukele): 是因为插入删除可能因为只支持唯一索引，索引冲突导致插入删除失败？？？
+        // 还是说全表扫描的时候没有锁住整个表
         // Due to how BusTub works for now, it is impossible to get more than bustub_nft_num rows, but it is possible to
         // get fewer than that number.
         if (all_nfts_integer.size() != bustub_nft_num) {

@@ -81,8 +81,9 @@
         // "lock_manager_test",
         // "deadlock_detection_test",
         // "txn_integration_test",
-        "shell",
-        "-j8",
+        // "shell",
+        "terrier-bench",
+        "-j`nproc`",
       ],
       "options": {
         "cwd": "${workspaceFolder}/build",

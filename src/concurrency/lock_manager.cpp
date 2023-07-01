@@ -1048,9 +1048,11 @@ void LockManager::BuildDeadlockDetectionGraph() {
   waits_for_table_.clear();
   waits_for_row_.clear();
   std::unique_lock<std::mutex> table_lock(table_lock_map_latch_);
-  std::unique_lock<std::mutex> row_lock(row_lock_map_latch_);
+  // FIXME(gukele): 缩小锁的范围？反正也request_queue也需要加锁，所以实际上无法保证获取当前时刻的所有请求队列的快照
+  // std::unique_lock<std::mutex> row_lock(row_lock_map_latch_);
   // 1.表级建图
   for (const auto &[_, table_lock_request_queue_ptr] : table_lock_map_) {
+    std::lock_guard<std::mutex> guard(table_lock_request_queue_ptr->latch_);
     auto &request_queue = table_lock_request_queue_ptr->request_queue_;
     auto non_granted = request_queue.begin();
     for (; non_granted != request_queue.end(); ++non_granted) {
@@ -1070,7 +1072,9 @@ void LockManager::BuildDeadlockDetectionGraph() {
   }
   table_lock.unlock();
   // 2.行级建图
+  std::unique_lock<std::mutex> row_lock(row_lock_map_latch_);
   for (const auto &[_, row_lock_request_queue_ptr] : row_lock_map_) {
+    std::lock_guard<std::mutex> guard(row_lock_request_queue_ptr->latch_);
     auto &request_queue = row_lock_request_queue_ptr->request_queue_;
     auto non_granted = request_queue.begin();
     for (; non_granted != request_queue.end(); ++non_granted) {

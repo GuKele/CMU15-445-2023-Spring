@@ -12,7 +12,7 @@
 #include "gtest/gtest.h"
 
 namespace bustub {
-TEST(LockManagerDeadlockDetectionTest, DISABLED_EdgeTest) {
+TEST(LockManagerDeadlockDetectionTest, EdgeTest) {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
   lock_mgr.txn_manager_ = &txn_mgr;
@@ -132,7 +132,7 @@ TEST(LockManagerDeadlockDetectionTest, BasicDeadlockDetectionTest1) {
 
 // others' test
 
-TEST(LockManagerDeadlockDetectionTest, DISABLED_BasicDeadlockDetectionTest2) {
+TEST(LockManagerDeadlockDetectionTest, BasicDeadlockDetectionTest2) {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
   lock_mgr.txn_manager_ = &txn_mgr;
@@ -221,7 +221,7 @@ TEST(LockManagerDeadlockDetectionTest, DISABLED_BasicDeadlockDetectionTest2) {
   delete txn2;
 }
 
-TEST(LockManagerDeadlockDetectionTest, DISABLED_CycleTest1) {
+TEST(LockManagerDeadlockDetectionTest, CycleTest1) {
   LockManager lock_mgr{};
   lock_mgr.AddEdge(0, 1);
   lock_mgr.AddEdge(1, 0);

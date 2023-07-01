@@ -35,7 +35,7 @@ class IndexIterator {
   IndexIterator();
   ~IndexIterator();  // NOLINT
 
-  IndexIterator(ReadPageGuard &&guard, BufferPoolManager *bpm, int index);
+  IndexIterator(BasicPageGuard &&guard, BufferPoolManager *bpm, int index);
 
   IndexIterator(const IndexIterator &that);
   auto operator=(const IndexIterator &that) -> IndexIterator &;
@@ -70,8 +70,9 @@ class IndexIterator {
   int index_{-1};
   const LeafPage *leaf_node_{nullptr};
   BufferPoolManager *bpm_;
-  // TODO(gukele): should the iterator hold PageGuard？
-  ReadPageGuard guard_;
+  // FIXME(gukele): should the iterator hold ReadPageGuard？如果持有读写锁，那么算子插入删除索引会导致死锁
+  // ReadPageGuard guard_;
+  BasicPageGuard guard_;
 };
 
 }  // namespace bustub

@@ -24,6 +24,7 @@
 #include "storage/table/tuple.h"
 #include "type/type_id.h"
 #include "type/value.h"
+#include "type/value_factory.h"
 
 namespace bustub {
 
@@ -36,7 +37,7 @@ void InsertExecutor::Init() {
   // std::cout << plan_->ToString() << std::endl;
 
   auto txn = exec_ctx_->GetTransaction();
-  is_end_ = false;
+  is_insert_finished_ = false;
   auto oid = plan_->TableOid();
 
   try {
@@ -54,7 +55,7 @@ void InsertExecutor::Init() {
 }
 
 auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
-  if (is_end_) {
+  if (is_insert_finished_) {
     return false;
   }
 
@@ -70,26 +71,42 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // InsertTuple中加X row锁了
     auto o_rid = insert_table_info->table_->InsertTuple({}, insert_tuple, exec_ctx_->GetLockManager(), txn, oid);
 
-    if (o_rid.has_value()) {
+    if (o_rid) {
       insert_rid = *o_rid;
-      txn->LockTxn();
-
-      IndexWriteRecord index_write_record(insert_rid, plan_->TableOid(), WType::INSERT, insert_tuple, {},
-                                          exec_ctx_->GetCatalog());
-      exec_ctx_->GetTransaction()->AppendIndexWriteRecord(index_write_record);
-
-      txn->UnlockTxn();
-    } else {
-      throw Exception(ExceptionType::OUT_OF_RANGE, "Insert Error");
-    }
-    for (auto index_info : indexes_info) {
-      auto key_tuple = insert_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
-                                                 index_info->index_->GetKeyAttrs());
-      auto succeed = index_info->index_->InsertEntry(key_tuple, insert_rid, txn);
-      // FIXME(gukele): 索引插入失败abort事务？事务记录应该吧index和tuple分开！
-      if (!succeed) {
-        txn->SetState(TransactionState::ABORTED);
+      {
+        txn->LockTxn();
+        TableWriteRecord table_write_record(insert_table_info->oid_, *o_rid, insert_table_info->table_.get());
+        table_write_record.wtype_ = WType::INSERT;
+        txn->AppendTableWriteRecord(table_write_record);
+        txn->UnlockTxn();
       }
+
+      for (auto index_info : indexes_info) {
+        auto key_tuple = insert_tuple.KeyFromTuple(child_executor_->GetOutputSchema(), index_info->key_schema_,
+                                                   index_info->index_->GetKeyAttrs());
+        auto succeed = index_info->index_->InsertEntry(key_tuple, insert_rid, txn);
+        // FIXME(gukele): 索引插入失败abort事务？事务记录应该吧index和tuple分开！
+
+        if (!succeed) {
+          txn->SetState(TransactionState::ABORTED);
+          *tuple = Tuple{std::vector<Value>{ValueFactory::GetIntegerValue(0)}, &GetOutputSchema()};
+          is_insert_finished_ = true;
+          return false;
+        }
+        {
+          txn->LockTxn();
+          IndexWriteRecord index_write_record(insert_rid, plan_->TableOid(), WType::INSERT, key_tuple,
+                                              index_info->index_oid_, exec_ctx_->GetCatalog());
+          txn->AppendIndexWriteRecord(index_write_record);
+          txn->UnlockTxn();
+        }
+      }
+    } else {
+      txn->SetState(TransactionState::ABORTED);
+      *tuple = Tuple{std::vector<Value>{ValueFactory::GetIntegerValue(0)}, &GetOutputSchema()};
+      is_insert_finished_ = true;
+      return false;
+      // throw Exception(ExceptionType::OUT_OF_RANGE, "Insert Error");
     }
     ++insert_cnt;
   }
@@ -101,7 +118,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   values.reserve(GetOutputSchema().GetColumnCount());
   values.emplace_back(INTEGER, insert_cnt);
   *tuple = Tuple{std::move(values), &GetOutputSchema()};
-  is_end_ = true;
+  is_insert_finished_ = true;
 
   return true;
 }

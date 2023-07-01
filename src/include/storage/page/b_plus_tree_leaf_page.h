@@ -68,7 +68,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
    * @brief 返回key对应的value， 好像还不如自己实现折半查找
    *
    * @param key
-   * @param val 存储返回的value
+   * @param[out] val 存储返回的value
    * @param comparator
    * @return false 没有查到
    */
@@ -78,7 +78,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
    * @brief 返回key对应的index
    *
    * @param key
-   * @param index the index of key or the index of first key' that bigger than key
+   * @param[out] index the index of key or the index of first key' that bigger than key
    * @return false表示不存在key，and the index is the index of first key' that bigger than key
    */
   auto IndexOfKey(const KeyType &key, const KeyComparator &comparator, int *index = nullptr) const -> bool;

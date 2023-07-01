@@ -40,8 +40,7 @@ void AggregationExecutor::Init() {
     aht_.InsertCombine(agg_key, agg_val);
   }
 
-  // TODO(gukele)
-  // when we have zero tuple to aggregate
+  // TODO(gukele): when we have zero tuple to aggregate
   if (aht_.Begin() == aht_.End() && GetOutputSchema().GetColumnCount() == 1) {
     aht_.InsertInitCombine();
   }

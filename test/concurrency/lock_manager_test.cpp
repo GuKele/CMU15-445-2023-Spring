@@ -497,14 +497,14 @@ void AbortTest1() {
   delete txn3;
 }
 
-TEST(LockManagerTest, TableLockTest1) { TableLockTest1(); }                                       // NOLINT
-TEST(LockManagerTest, SingleTableLockUpgradeTest1) { SingleTableLockUpgradeTest1(); }             // NOLINT
-TEST(LockManagerTest, DISABLED_MutipleTableLockUpgradeTest1) { MutipleTableLockUpgradeTest1(); }  // NOLINT
-TEST(LockManagerTest, RowLockTest1) { RowLockTest1(); }                                           // NOLINT
-TEST(LockManagerTest, SingleRowLockUpgradeTest1) { SingleRowLockUpgradeTest1(); }                 // NOLINT
-TEST(LockManagerTest, DISABLED_MutipleRowLockUpgradeTest1) { MutipleRowLockUpgradeTest1(); }      // NOLINT
-TEST(LockManagerTest, TwoPLTest1) { TwoPLTest1(); }                                               // NOLINT
-TEST(LockManagerTest, RowAbortTest1) { AbortTest1(); }                                            // NOLINT
+TEST(LockManagerTest, TableLockTest1) { TableLockTest1(); }                              // NOLINT
+TEST(LockManagerTest, SingleTableLockUpgradeTest1) { SingleTableLockUpgradeTest1(); }    // NOLINT
+TEST(LockManagerTest, MutipleTableLockUpgradeTest1) { MutipleTableLockUpgradeTest1(); }  // NOLINT
+TEST(LockManagerTest, RowLockTest1) { RowLockTest1(); }                                  // NOLINT
+TEST(LockManagerTest, SingleRowLockUpgradeTest1) { SingleRowLockUpgradeTest1(); }        // NOLINT
+TEST(LockManagerTest, MutipleRowLockUpgradeTest1) { MutipleRowLockUpgradeTest1(); }      // NOLINT
+TEST(LockManagerTest, TwoPLTest1) { TwoPLTest1(); }                                      // NOLINT
+TEST(LockManagerTest, RowAbortTest1) { AbortTest1(); }                                   // NOLINT
 
 // others' test
 

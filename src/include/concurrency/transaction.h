@@ -123,6 +123,8 @@ class TableWriteRecord {
   RID rid_;
   TableHeap *table_heap_;
 
+  // 无法利用TableWriteRecord来恢复原地修改啊！！就一个rid,根本不知道原地修改之前的tuple是什么啊
+  // NOTE(gukele): 所以用IndexWriteRecord wtype_=update的时候表示这是tuple原地修改而非index修改
   // Recording write type might be useful if you want to implement in-place update for leaderboard optimization.
   // You don't need it for the basic implementation.
   WType wtype_;
@@ -143,7 +145,7 @@ class IndexWriteRecord {
    * figure out how to use this structure to store what you need.
    */
 
-  // TODO(gukele): IndexWriteRecord结构设计不合理，而且BPlusTree中的txn并没有用上
+  // TODO(gukele): IndexWriteRecord结构设计似乎有些不合理
 
   /** The rid is the value stored in the index. */
   RID rid_;
@@ -152,8 +154,12 @@ class IndexWriteRecord {
   /** Write type. */
   WType wtype_;
   /** The tuple is used to construct an index key. */
+  // 目前我改成直接表示key tuple，但是TableWriteRecord无法回复原地修改的tuple,所以还是表示tuple吧
   Tuple tuple_;
   /** The old tuple is only used for the update operation. */
+  // 我直接改成了old key tuple？？？
+  // 还是说我保存成old_tuple,然后当WType是update时，也表示我是原地更改了table,不太行，如果一个索引都没插入成功呢
+  // 但是TableWriteRecord无法回复原地修改的tuple,所以还是表示tuple吧
   Tuple old_tuple_;
   /** Each table has an index list, this is the identifier of an index into the list. */
   index_oid_t index_oid_;
@@ -401,7 +407,8 @@ class Transaction {
   /** The LSN of the last record written by the transaction. */
   lsn_t prev_lsn_;
 
-  // TODO(gukele): 一个事物可能对应多个线程？LockManager中deadlock detection线程至多读写state_
+  // TODO(gukele): 一个事物可能对应多个线程？或者在算子执行的过程中本身就是多线程？
+  // LockManager中deadlock detection线程至多读写state_
   std::mutex latch_;
 
   /** Concurrent index: the pages that were latched during index operation. */

@@ -148,7 +148,7 @@ class BPlusTree {
    */
   auto FindLeafForRead(const KeyType &key, Context *context) const -> const LeafPage *;
 
-  auto FindLeftMostLeaf(Context *context) const -> const LeafPage *;
+  auto FindLeftMostLeafForRead(Context *context) const -> const LeafPage *;
 
   /*****************************************************************************
    * INSERTION

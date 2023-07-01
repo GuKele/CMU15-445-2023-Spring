@@ -37,6 +37,7 @@ class BPlusTreeIndex : public Index {
 
   auto GetBeginIterator() -> INDEXITERATOR_TYPE;
 
+  // TODO(gukele): should be Tuple argument!!!
   auto GetBeginIterator(const KeyType &key) -> INDEXITERATOR_TYPE;
 
   auto GetEndIterator() -> INDEXITERATOR_TYPE;

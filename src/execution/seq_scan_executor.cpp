@@ -35,10 +35,6 @@ void SeqScanExecutor::Init() {
   // throw NotImplementedException("SeqScanExecutor is not implemented");
   auto exec_ctx = GetExecutorContext();
   auto table_info = exec_ctx->GetCatalog()->GetTable(plan_->GetTableOid());
-  // TODO(gukele): figure out Halloween problem。
-  // MakeIterator is introduced to avoid the Halloween problem in Project 3's
-  // UpdateExecutor, but you do not need it now.
-  iterator_.emplace(table_info->table_->MakeEagerIterator());
   // TODO(gukele): 存在问题，按理说RR下应该是加S表锁，如果是DELETE ... WHERE ...应该是SIX锁。
   // 但是好像因为历史问题，项目刚增加了意向锁的实现，所以目前使用意向锁+行锁来实现
   try {
@@ -73,6 +69,19 @@ void SeqScanExecutor::Init() {
   } catch (const TransactionAbortException &e) {
     throw ExecutionException("seq scan TransactionAbort");
   }
+
+  /*
+   * // NOTE(gukele): Halloween problem。
+   * MakeIterator is introduced to avoid the Halloween problem in Project 3's
+   * UpdateExecutor, but you do not need it now.
+   * 万圣节问题，就是update有两种实现，一种是原地修改，一种是删除+插入，那么在遍历表并且做修改的时候，我们如果
+   * 不记录当时表最大的数量，就会把后来更新(标记删除，然后表最后插入)的那写数据重新遍历，直到所有人都不满足update的条件了
+   */
+
+  // 不用索引的时候，使用MakeIterator()无法通过测试，因为会delete + insert,然后有个全表扫描，肯定扫不全
+  // 因为后边会有新插入的，类似于万圣节问题，只不过现在是希望能看到新插入的
+  // iterator_.emplace(table_info->table_->MakeIterator());
+  iterator_.emplace(table_info->table_->MakeEagerIterator());
 }
 
 /*
@@ -90,7 +99,7 @@ void SeqScanExecutor::Init() {
  */
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (!iterator_.has_value()) {
+  if (!iterator_) {
     throw Exception(ExceptionType::EXECUTION, "std::optional iterator should have value");
   }
   auto &iter = iterator_.value();
@@ -171,7 +180,6 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   // std::cout << plan_->OutputSchema().ToString() << std::endl;
 
   // TODO(gukele): 如果是本算子加上的IS表锁，并且是RC，检查无本表的读锁以后，应该直接释放IS表锁吧
-
   return false;
 }
 

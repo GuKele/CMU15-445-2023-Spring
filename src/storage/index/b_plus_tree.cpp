@@ -87,7 +87,7 @@ auto BPLUSTREE_TYPE::FindLeafForRead(const KeyType &key, Context *context) const
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::FindLeftMostLeaf(Context *context) const -> const LeafPage * {
+auto BPLUSTREE_TYPE::FindLeftMostLeafForRead(Context *context) const -> const LeafPage * {
   // FindLeafForRead(Min_KeyType_obj, &context);
   if (auto root_page_id = GetRootPageIdForRead(context); root_page_id != INVALID_PAGE_ID) {
     auto read_page_guard = bpm_->FetchPageRead(context->root_page_id_);
@@ -536,8 +536,8 @@ void BPLUSTREE_TYPE::DeleteFromParent(int index, Context *context) {
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
   Context ctx;
-  if (FindLeftMostLeaf(&ctx)) {
-    return INDEXITERATOR_TYPE(std::move(ctx.read_set_.back()), bpm_, 0);
+  if (FindLeftMostLeafForRead(&ctx)) {
+    return INDEXITERATOR_TYPE(std::move(ctx.read_set_.back().DecayToBasePageGuard()), bpm_, 0);
   }
   return INDEXITERATOR_TYPE();
 }
@@ -556,8 +556,8 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
     leaf_node->IndexOfKey(key, comparator_, &index);
     assert(!ctx.read_set_.empty());
     // BUG(gukele): 如果是最后一叶，并且还是比最后一个槽还大，实际上就是b+树的end索引了,已经修复
-    if (leaf_node->GetNextPageId() != INVALID_PAGE_ID && index != leaf_node->GetSize()) {
-      return INDEXITERATOR_TYPE(std::move(ctx.read_set_.back()), bpm_, index);
+    if (leaf_node->GetNextPageId() != INVALID_PAGE_ID || index != leaf_node->GetSize()) {
+      return INDEXITERATOR_TYPE(std::move(ctx.read_set_.back().DecayToBasePageGuard()), bpm_, index);
     }
   }
   return INDEXITERATOR_TYPE();
