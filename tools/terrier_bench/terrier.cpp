@@ -250,6 +250,7 @@ auto main(int argc, char **argv) -> int {
 
   total_metrics.Begin();
 
+  // update or delete + insert
   for (size_t thread_id = 0; thread_id < BUSTUB_TERRIER_THREAD; thread_id++) {
     threads.emplace_back(
         std::thread([verbose, thread_id, &bustub, enable_update, duration_ms, &total_metrics, bustub_nft_num] {

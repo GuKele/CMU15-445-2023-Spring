@@ -25,7 +25,9 @@ Tuple::Tuple(std::vector<Value> values, const Schema *schema) {
   assert(values.size() == schema->GetColumnCount());
 
   // 1. Calculate the size of the tuple.
+  // lined column size
   uint32_t tuple_size = schema->GetLength();
+  // unlined column size
   for (auto &i : schema->GetUnlinedColumns()) {
     auto len = values[i].GetLength();
     if (len == BUSTUB_VALUE_NULL) {

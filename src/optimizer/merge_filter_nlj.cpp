@@ -58,7 +58,10 @@ auto Optimizer::OptimizeMergeFilterNLJ(const AbstractPlanNodeRef &plan) -> Abstr
     if (child_plan->GetType() == PlanType::NestedLoopJoin) {
       const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*child_plan);
       // Has exactly two children
-      BUSTUB_ENSURE(child_plan->GetChildren().size() == 2, "NLJ should have exactly 2 children.");
+      BUSTUB_ENSURE(nlj_plan.GetChildren().size() == 2, "NLJ should have exactly 2 children.");
+
+      BUSTUB_ENSURE(IsJoinPredicate(filter_plan.GetPredicate()),
+                    "只想merge join predicate, 如果包含non-join predicate,更希望是分离出non-join predicate后push down");
 
       if (IsPredicateTrue(nlj_plan.Predicate())) {
         // Only rewrite when NLJ has always true predicate.

@@ -60,7 +60,6 @@ void IndexScanExecutor::Init() {
 
   auto b_plus_tree_index = dynamic_cast<BPlusTreeIndexForTwoIntegerColumn *>(index_info->index_.get());
   if (plan_->filter_predicate_ != nullptr) {
-    // TODO(gukele): 实现更复杂的index lookup
     BUSTUB_ASSERT(plan_->ranges_.size() == 1, "we only implement one range index scan plan");
     auto comparator = IntegerComparatorType(&index_info->key_schema_);
     auto range = plan_->ranges_.front();

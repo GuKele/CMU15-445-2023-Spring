@@ -81,8 +81,8 @@
         // "lock_manager_test",
         // "deadlock_detection_test",
         // "txn_integration_test",
-        // "shell",
-        "terrier-bench",
+        "shell",
+        // "terrier-bench",
         "-j`nproc`",
       ],
       "options": {

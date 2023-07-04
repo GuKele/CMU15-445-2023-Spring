@@ -78,7 +78,7 @@ class SimpleAggregationHashTable {
           result->aggregates_[i] = result->aggregates_[i].Add(ValueFactory::GetIntegerValue(1));
           break;
         case AggregationType::CountAggregate:
-          if (!input.aggregates_[i].IsNull()) {
+          if (!input.aggregates_[i].IsNull()) {  // count(xx_column)需要非null才计数
             if (result->aggregates_[i].IsNull()) {
               result->aggregates_[i] = ValueFactory::GetIntegerValue(1);
             } else {
@@ -224,7 +224,7 @@ class AggregationExecutor : public AbstractExecutor {
   }
 
   /** @return The tuple as an AggregateValue */
-  // count(value)、sum(value)
+  // count(value)、sum(value)等所有聚合函数中的列的value
   auto MakeAggregateValue(const Tuple *tuple) -> AggregateValue {
     std::vector<Value> vals;
     for (const auto &expr : plan_->GetAggregates()) {

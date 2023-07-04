@@ -65,6 +65,7 @@ class IndexScanPlanNode : public AbstractPlanNode {
   std::string index_name_;
   int index_num_ = -1;  // 表示使用索引中的前几列
   AbstractExpressionRef filter_predicate_;
+  // TODO(gukele): 重构index scan的optimizer,变成开闭区间
   // 表示所有的索引区间[begin, end]，遵循最左前缀原则
   // std::vector<std::pair<Tuple, Tuple>> ranges_;
   std::vector<std::pair<std::vector<Value>, std::vector<Value>>> ranges_;

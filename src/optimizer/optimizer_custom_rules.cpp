@@ -1,3 +1,4 @@
+#include <sys/types.h>
 #include <algorithm>
 #include <array>
 #include <cfloat>
@@ -6,7 +7,11 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 #include "binder/table_ref/bound_join_ref.h"
 #include "catalog/catalog.h"
@@ -14,6 +19,7 @@
 #include "catalog/schema.h"
 #include "common/config.h"
 #include "common/exception.h"
+#include "common/logger.h"
 #include "common/macros.h"
 #include "concurrency/transaction.h"
 #include "execution/expressions/abstract_expression.h"
@@ -24,11 +30,14 @@
 #include "execution/expressions/logic_expression.h"
 #include "execution/plans/abstract_plan.h"
 #include "execution/plans/aggregation_plan.h"
+#include "execution/plans/delete_plan.h"
 #include "execution/plans/filter_plan.h"
 #include "execution/plans/index_scan_plan.h"
+#include "execution/plans/insert_plan.h"
 #include "execution/plans/nested_loop_join_plan.h"
 #include "execution/plans/projection_plan.h"
 #include "execution/plans/seq_scan_plan.h"
+#include "execution/plans/sort_plan.h"
 #include "execution/plans/values_plan.h"
 #include "optimizer/optimizer.h"
 #include "type/limits.h"
@@ -48,15 +57,50 @@ namespace bustub {
 auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   /* 优化顺序很重要 */
   auto p = plan;
-  p = OptimizeConstantFold(p);
-  p = OptimizeEliminateTrueFilter(p);
-  p = OptimizeEliminateFalseFilter(p);
-  p = OptimizeMergeProjection(p);  // project与下层输出完全一样，最多只是换了列的名字时，去除该project
-  p = OptimizeEliminateProjection(p);
-  p = OptimizeFilterNLJPushDown(p);  // 应该在Filter + NLJ改变之前调用，例如MergeFilterNLJ、NLJAsHashJoin
-  p = OptimizeMergeFilterNLJ(p);
-  p = OptimizeMergeFilterScan(p);  // 谓词filter下推 Filter + Scan -> Scan + Filter
-  p = OptimizeRemoveNLJ(p);
+  {
+    // TODO(gukele): 常量折叠需要完善
+    p = OptimizeConstantFold(p);
+  }
+
+  {
+    p = OptimizeEliminateTrueFilter(p);
+    p = OptimizeEliminateFalseFilter(p);  // 可能产生空empty ValuesPlan
+  }
+
+  {
+    // TODO(gukele): 应该在这里将所有空ValuesPlan都merge了
+    // TODO(gukele): 应该和OptimizeColumnPruningForAnyType()一样，实现OptimizeRemoveEmptyValues()
+    // 既可以避免多次遍历树浪费，同时也无需考虑谁先优化的问题，并且减少了这里所需要调用的接口。
+    p = OptimizeRemoveProjectionEmptyValues(p);
+    p = OptimizeRemoveNLJEmptyValues(p);
+  }
+
+  {
+    // TODO(gukele): 实现merge projection + any plan
+    p = OptimizeMergeProjection(p);  // project与下层输出完全一样，最多只是换了列的名字时，去除该project
+    p = OptimizeEliminateContinuousProjection(p);
+  }
+
+  {
+    // 目前不会产生新的projection,后续可能会更改
+    // 可能对p4 leader board反而负优化
+    p = OptimizeColumnPruning(p);
+  }
+
+  {
+    // filter should be merged or pushed down
+    // TODO(gukele): Filter's predicate push down to any plan
+    p = OptimizeFilterNLJPredicatePushDown(p);  // push down可能会产生新的Filter,在merge filter之前使用
+
+    // TODO(gukele): merge filter + any plan
+
+    // 应该是冗余的，在OptimizeFilterNLJPredicatePushDown中，相当于所有Filter + NLJ的情况都被merge了
+    // p = OptimizeMergeFilterNLJ(p);
+
+    // 谓词filter下推 Filter + Scan -> Scan + Filter
+    p = OptimizeMergeFilterScan(p);
+  }
+
   p = OptimizeOrderByAsIndexScan(p);
   p = OptimizeSortLimitAsTopN(p);     // limit + sort -> Top-N
   p = OptimizeSeqScanAsIndexScan(p);  //
@@ -94,10 +138,10 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   return p;
 }
 
-auto Optimizer::OptimizeEliminateProjection(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizeEliminateContinuousProjection(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : plan->GetChildren()) {
-    children.emplace_back(OptimizeEliminateProjection(child));
+    children.emplace_back(OptimizeEliminateContinuousProjection(child));
   }
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
 
@@ -154,7 +198,7 @@ auto Optimizer::OptimizeEliminateProjection(const AbstractPlanNodeRef &plan) -> 
       std::vector<AbstractExpressionRef> new_exprs;
       new_exprs.reserve(project_exprs.size());
       for (const auto &expr : project_exprs) {
-        new_exprs.emplace_back(RewriteExpressionForEliminateProjection(expr, child_project_exprs));
+        new_exprs.emplace_back(RewriteExpressionForEliminateContinuousProjection(expr, child_project_exprs));
       }
       return std::make_shared<ProjectionPlanNode>(project_plan.output_schema_, std::move(new_exprs),
                                                   child_project_plan.GetChildPlan());
@@ -174,12 +218,12 @@ auto Optimizer::OptimizeEliminateProjection(const AbstractPlanNodeRef &plan) -> 
   return optimized_plan;
 }
 
-auto Optimizer::RewriteExpressionForEliminateProjection(const AbstractExpressionRef &expr,
-                                                        const std::vector<AbstractExpressionRef> &children_exprs)
+auto Optimizer::RewriteExpressionForEliminateContinuousProjection(
+    const AbstractExpressionRef &expr, const std::vector<AbstractExpressionRef> &children_exprs)
     -> AbstractExpressionRef {
   std::vector<AbstractExpressionRef> children;
   for (const auto &child : expr->GetChildren()) {
-    children.emplace_back(RewriteExpressionForEliminateProjection(child, children_exprs));
+    children.emplace_back(RewriteExpressionForEliminateContinuousProjection(child, children_exprs));
   }
   AbstractExpressionRef rewrite_expr = expr->CloneWithChildren(std::move(children));
 
@@ -337,8 +381,10 @@ auto Optimizer::RewriteExpressionForConstantFold(const AbstractExpressionRef &ex
    *         SeqScan { table=result }
    *         SeqScan { table=graph }
    *
+   * 所以只能在filter下面是scan这种情况才能消除相同ColumnValueExpression比较
    *
    */
+
   // if (auto comparison_expr = dynamic_cast<ComparisonExpression *>(rewrite_expr.get()); comparison_expr != nullptr) {
   //   auto &children_exprs = comparison_expr->GetChildren();
   //   BUSTUB_ASSERT(children_exprs.size() == 2, "Comparison expression should have exactly two children expressions.");
@@ -447,7 +493,7 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const AbstractPlanNodeRef &plan) -> A
               next = constant_value.CompareGreaterThan(max) == CmpBool::CmpTrue ? max : constant_value.Add(one);
               break;
             case TypeId::DECIMAL:
-              throw Exception(ExceptionType::EXECUTION, "decimal type not implemented");
+              throw NotImplementedException("Decimal type not implemented");
               {
                 auto value = constant_value.GetAs<double>();
                 auto max_double = std::nextafter(value, DBL_MAX);
@@ -457,7 +503,7 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const AbstractPlanNodeRef &plan) -> A
               break;
             case TypeId::VARCHAR:
             case TypeId::BOOLEAN:
-              throw Exception(ExceptionType::EXECUTION, "other type not implemented");
+              throw NotImplementedException("Other type value not implemented");
             case INVALID:
             default:
               break;
@@ -622,69 +668,833 @@ auto Optimizer::CanUseIndexLookup(const AbstractExpressionRef &expr, const std::
         }
       }
     } else {
+      throw NotImplementedException("Or logic not implemented");
       BUSTUB_ASSERT(true, "Or logic not implemented");
     }
   }
   return std::nullopt;
 }
 
+// auto Optimizer::OptimizeColumnPruningImpl(const AbstractPlanNodeRef &plan, std::unordered_map<uint32_t, uint32_t>
+// &father_column_indexes_map) -> AbstractPlanNodeRef {
+//   throw ExecutionException("Column pruning not implemented");
+
+//   AbstractPlanNodeRef new_plan_without_children;
+
+//   // 说明plan是根(或者是目前没有实现列裁剪的plan type)，不需要column pruning
+//   std::unordered_map<uint32_t, uint32_t> column_indexes_map(father_column_indexes_map);
+//   if(father_column_indexes_map.empty()) {
+//     for(std::size_t i = 0 ; i < plan->OutputSchema().GetColumnCount() ; ++i) {
+//       column_indexes_map.insert({i, i});
+//     }
+//   }
+
+//   SchemaRef new_schema;
+//   std::vector<Column> new_columns;
+//   const auto &children = plan->GetChildren();
+//   // TODO(gukele): 我们现在只修改Projection，DataSource，Aggregation这三种plan的返回列数
+//   switch (plan->GetType()) {
+//     case PlanType::Filter:
+//       BUSTUB_ASSERT(children.size() == 1, "Filter must have exactly one children");
+
+//       // 根据父亲需要哪些列和自己需要的列，只返回这些列，那么需要修改output schema
+//       // 那么此时父亲的expr中的colum value expr如何变化，也就知道了
+//       GetColumnIndexes(dynamic_cast<const FilterPlanNode &>(*plan).GetPredicate(), column_indexes_map);
+//       {
+//         std::size_t i = 0;
+//         for(auto &[old_column_index, _] : column_indexes_map) {
+//           // new_column_index = i++;
+//           if(auto iter = father_column_indexes_map.find(old_column_index); iter != father_column_indexes_map.end()) {
+//             iter->second = i;
+//           }
+//           new_columns.emplace_back(plan->OutputSchema().GetColumn(i));
+//           ++i;
+//         }
+//       }
+//       new_schema = std::make_shared<Schema>(new_columns);
+//       break;
+//     case PlanType::Aggregation:
+//       BUSTUB_ASSERT(children.size() == 1, "Aggregation must have exactly one children");
+
+//       const auto &agg_plan = dynamic_cast<const AggregationPlanNode &>(*plan);
+
+//       // group by key
+//       for(const auto &expr : agg_plan.GetGroupBys()) {
+//         if(auto column_value_expr = dynamic_cast<ColumnValueExpression *>(expr.get()); column_value_expr != nullptr)
+//         {
+//           // BUSTUB_ASSERT(column_value_expr != nullptr, "Aggregate expr should be ColumnValueExpr");
+//           column_indexes_map[column_value_expr->GetColIdx()] = column_value_expr->GetColIdx();
+//         }
+//       }
+
+//       // 聚合函数去重
+//       // std::unordered_map<uint32_t, uint32_t> aggregation_map;
+//       const auto &aggregations = agg_plan.GetAggregates();
+//       const auto &agg_types = agg_plan.GetAggregateTypes();
+//       // FIXME(gukele): unordered_map
+//       // 相同AggregationType、使用相同列的aggregation放在一起，方便去重
+//       std::map<std::pair<AggregationType, uint32_t>, std::size_t> unique_agg;
+//       for(std::size_t i = 0 ; i < aggregations.size() ; ++i) {
+//         if(auto column_value_expr = dynamic_cast<ColumnValueExpression *>(aggregations[i].get()); column_value_expr
+//         != nullptr) {
+//           std::pair<AggregationType, uint32_t> key = {agg_types[i], column_value_expr->GetColIdx()};
+//           if(unique_agg.find(key) == unique_agg.end()) {
+//             unique_agg[key] = i;
+//           }
+//         } else {
+//           // count(常数) == count(*)
+//           throw ExecutionException("111聚合函数中出现非column value expr");
+//         }
+//       }
+
+//       // 重写聚合函数 和 schema,修改father_column_indexes_map
+//       std::vector<AbstractExpressionRef> new_aggregations;
+//       {
+//         std::size_t new_index = 0;
+//         std::unordered_map<uint32_t, std::size_t> new_indexes;
+//         for(const auto &[_, unique_old_index] : unique_agg) {
+//           new_indexes[unique_old_index] = new_index++;
+//           new_aggregations.emplace_back(aggregations[unique_old_index]);
+//           new_columns.emplace_back( plan->OutputSchema().GetColumn(unique_old_index));
+//         }
+//         new_schema = Schema(new_columns);
+
+//         for(auto &[old_index, new_index] : father_column_indexes_map) {
+//           if(auto column_value_expr = dynamic_cast<ColumnValueExpression *>(aggregations[old_index].get());
+//           column_value_expr != nullptr) {
+//             // BUSTUB_ASSERT(column_value_expr != nullptr, "Aggregate expr should be ColumnValueExpr");
+//             std::pair<AggregationType, uint32_t> key = {agg_types[old_index], column_value_expr->GetColIdx()};
+//             new_index = new_indexes[unique_agg[key]];
+//           } else {
+//             throw ExecutionException("222聚合函数中出现非column value expr");
+//           }
+//         }
+//       }
+//       break;
+//     case PlanType::SeqScan:
+//     case PlanType::Sort:
+//     case PlanType::NestedLoopJoin:
+//     default:
+//       // 还没实现的裁剪
+//       break;
+//   }
+
+//   // 利用column_indexes来构造新的
+
+//   // 孩子返回了自己的新column_indexes,自己重写自己的expr,然后才能写啊
+//   std::vector<AbstractPlanNodeRef> new_children;
+//   for (const auto &child : plan->GetChildren()) {
+//     new_children.emplace_back(OptimizeColumnPruningImpl(child, column_indexes_map));
+//   }
+//   AbstractExpressionRef new_expr;
+
+//   RewriteExpressionForColumnPruning(, column_indexes_map)
+//   auto optimize_plan = FilterPlanNode(std::move(new_schema), new_expr, std::move(new_children));
+
+//   new_plan_without_children = plan->CloneWithChildren(std::move(new_children));
+
+//   return new_plan_without_children;
+// }
+
 auto Optimizer::OptimizeColumnPruning(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
-  throw Exception(ExceptionType::EXECUTION, "Column pruning not implemented");
+  std::unordered_map<uint32_t, uint32_t> unused{};
+  return OptimizeColumnPruningForAnyType(plan, unused);
 }
 
-auto Optimizer::OptimizeFilterNLJPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizeColumnPruningForAnyType(const AbstractPlanNodeRef &plan,
+                                                std::unordered_map<uint32_t, uint32_t> &father_column_indexes_map)
+    -> AbstractPlanNodeRef {
+  AbstractPlanNodeRef optimize_plan = plan;
+  // 说明plan是根(或者还没实现列裁剪的类型)，不需要裁剪，只对孩子裁剪，最多只需要重写exprs
+  if (father_column_indexes_map.empty()) {
+    std::unordered_map<uint32_t, uint32_t> all_columns_needed_from_children;
+    std::unordered_map<uint32_t, uint32_t> all_columns_needed_from_right_children_for_join;
+    // 当父亲为空时，说明自己是根或者是没有实现列裁剪的plan类型，那么我们自己所有的列中所需要的孩子的列就是
+    GetAllColumnsNeededFromChildren(optimize_plan, all_columns_needed_from_children);  // 自己不裁剪
+    std::vector<AbstractPlanNodeRef> children;
+    if (optimize_plan->GetType() != PlanType::NestedLoopJoin) {
+      BUSTUB_ASSERT(optimize_plan->GetChildren().size() <= 1, "最多只有一个孩子!");
+      for (const auto &child : optimize_plan->GetChildren()) {
+        children.emplace_back(OptimizeColumnPruningForAnyType(child, all_columns_needed_from_children));
+      }
+    } else {
+      // 分裂column_indexes_map
+      const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimize_plan);
+      uint32_t pivot = nlj_plan.GetLeftPlan()->OutputSchema().GetColumnCount();
+      for (auto iter = all_columns_needed_from_children.begin(); iter != all_columns_needed_from_children.end();) {
+        if (iter->first >= pivot) {
+          all_columns_needed_from_right_children_for_join.insert({iter->first - pivot, iter->second - pivot});
+          iter = all_columns_needed_from_children.erase(iter);
+        } else {
+          ++iter;
+        }
+      }
+      children.emplace_back(OptimizeColumnPruningForAnyType(nlj_plan.GetLeftPlan(), all_columns_needed_from_children));
+      children.emplace_back(
+          OptimizeColumnPruningForAnyType(nlj_plan.GetRightPlan(), all_columns_needed_from_right_children_for_join));
+    }
+
+    optimize_plan = optimize_plan->CloneWithChildren(std::move(children));
+
+    // 只有其孩子列裁剪改变了output schema,父亲才需要重写表达式.
+    // FIXME(gukele): 目前只处理只有一个孩子的情况
+
+    if (!optimize_plan->GetChildren().empty()) {
+      switch (optimize_plan->GetChildAt(0)->GetType()) {
+        case PlanType::Aggregation:
+        case PlanType::Filter:
+        case PlanType::Projection:
+          if (optimize_plan->GetType() == PlanType::NestedLoopJoin) {
+            optimize_plan = RewriteExpressionForColumnPruning(optimize_plan, all_columns_needed_from_children,
+                                                              all_columns_needed_from_right_children_for_join);
+          } else {
+            optimize_plan = RewriteExpressionForColumnPruning(optimize_plan, all_columns_needed_from_children);
+          }
+          break;
+        case PlanType::SeqScan:
+        case PlanType::NestedLoopJoin:
+        case PlanType::Sort:
+        default:
+          // 如果第二个孩子进行了列裁剪，我们同样需要重写expr
+          if (optimize_plan->GetChildren().size() > 1 &&
+              (optimize_plan->GetChildAt(1)->GetType() == PlanType::Aggregation ||
+               optimize_plan->GetChildAt(1)->GetType() == PlanType::Projection ||
+               optimize_plan->GetChildAt(1)->GetType() == PlanType::Filter)) {
+            if (optimize_plan->GetType() == PlanType::NestedLoopJoin) {
+              optimize_plan = RewriteExpressionForColumnPruning(optimize_plan, all_columns_needed_from_children,
+                                                                all_columns_needed_from_right_children_for_join);
+            }
+          }
+          break;
+      }
+    }
+
+    return optimize_plan;
+  }
+
+  switch (plan->GetType()) {
+    case PlanType::Aggregation:
+      optimize_plan = OptimizeColumnPruningForAggregation(plan, father_column_indexes_map);
+      break;
+    case PlanType::Filter:
+      optimize_plan = OptimizeColumnPruningForFilter(plan, father_column_indexes_map);
+      break;
+    case PlanType::Projection:
+      optimize_plan = OptimizeColumnPruningForProjection(plan, father_column_indexes_map);
+      break;
+    case PlanType::SeqScan:
+      // 没有孩子,目前也不裁剪
+      optimize_plan = plan;
+      break;
+    case PlanType::Sort:
+    case PlanType::NestedLoopJoin:
+    default:
+      // // NOTE(gukele): 还没实现，目前不进行列裁剪，但是对孩子进行列裁剪，并且可能重写自己的exprs
+      // std::unordered_map<uint32_t, uint32_t> all_column_need_from_children;
+      // std::unordered_map<uint32_t, uint32_t> all_column_need_from_children_for_join_right;
+      // GetAllColumnsNeededFromChildren(plan, all_column_need_from_children);
+      // std::vector<AbstractPlanNodeRef> children;
+      // if(plan->GetType() != PlanType::NestedLoopJoin) {
+      //   BUSTUB_ASSERT(plan->GetChildren().size() <= 1, "最多只有一个孩子!");
+      //   for (const auto &child : plan->GetChildren()) {
+      //     children.emplace_back(OptimizeColumnPruningForAnyType(child, all_column_need_from_children));
+      //   }
+      // } else {
+      //   // 分裂column_indexes_map
+      //   const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*plan);
+      //   uint32_t pivot = nlj_plan.GetLeftPlan()->OutputSchema().GetColumnCount();
+      //   for(auto iter = all_column_need_from_children.begin() ; iter != all_column_need_from_children.end() ; ) {
+      //     if(iter->first >= pivot) {
+      //       all_column_need_from_children_for_join_right.insert({iter->first - pivot, iter->second});
+      //       iter = all_column_need_from_children.erase(iter);
+      //     } else {
+      //       ++iter;
+      //     }
+      //   }
+      //   children.emplace_back(OptimizeColumnPruningForAnyType(nlj_plan.GetLeftPlan(),
+      //   all_column_need_from_children));
+      //   children.emplace_back(OptimizeColumnPruningForAnyType(nlj_plan.GetRightPlan(),
+      //   all_column_need_from_children_for_join_right));
+      // }
+      // optimize_plan = plan->CloneWithChildren(std::move(children));
+
+      // // 只有其孩子列裁剪改变了output schema,父亲才需要重写表达式.
+      // // FIXME(gukele): 目前只处理只有一个孩子的情况
+      // if (!optimize_plan->GetChildren().empty()) {
+      //   switch (optimize_plan->GetChildAt(0)->GetType()) {
+      //     case PlanType::Aggregation:
+      //     case PlanType::Filter:
+      //     case PlanType::Projection:
+      //       if(optimize_plan->GetType() == PlanType::NestedLoopJoin) {
+      //         optimize_plan = RewriteExpressionForColumnPruning(optimize_plan, all_column_need_from_children,
+      //         all_column_need_from_children_for_join_right);
+      //       } else {
+      //         optimize_plan = RewriteExpressionForColumnPruning(optimize_plan, all_column_need_from_children);
+      //       }
+      //       break;
+      //     case PlanType::SeqScan:
+      //     case PlanType::NestedLoopJoin:
+      //     case PlanType::Sort:
+      //     default:
+      //       // 如果第二个孩子进行了列裁剪，我们同样需要重写expr
+      //       if(optimize_plan->GetChildren().size() > 1 &&
+      //         (optimize_plan->GetChildAt(1)->GetType() == PlanType::Aggregation ||
+      //          optimize_plan->GetChildAt(1)->GetType() == PlanType::Projection ||
+      //          optimize_plan->GetChildAt(1)->GetType() == PlanType::Filter)) {
+      //            if(optimize_plan->GetType() == PlanType::NestedLoopJoin) {
+      //              optimize_plan = RewriteExpressionForColumnPruning(optimize_plan, all_column_need_from_children,
+      //              all_column_need_from_children_for_join_right);
+      //            }
+      //          }
+      //       break;
+      //   }
+      // }
+      std::unordered_map<uint32_t, uint32_t> unused;
+      optimize_plan = OptimizeColumnPruningForAnyType(plan, unused);
+      break;
+  }
+
+  return optimize_plan;
+}
+
+auto Optimizer::OptimizeColumnPruningForFilter(const AbstractPlanNodeRef &plan,
+                                               std::unordered_map<uint32_t, uint32_t> &father_column_indexes_map)
+    -> AbstractPlanNodeRef {
+  BUSTUB_ASSERT(plan->GetType() == PlanType::Filter && !father_column_indexes_map.empty(),
+                "Plan should be Filter and father_column_indexes_map should not empty!");
+  if (father_column_indexes_map.size() == plan->OutputSchema().GetColumnCount()) {
+    // plan不需要裁剪
+    std::unordered_map<uint32_t, uint32_t> unused;
+    return OptimizeColumnPruningForAnyType(plan, unused);
+  }
+
+  const auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*plan);
+  // 根据父亲需要哪些列和自己需要的列，只返回这些列，那么需要修改output schema
+  // 那么此时父亲的expr中的colum value expr如何变化，也就知道了
+  auto column_indexes_map = father_column_indexes_map;
+  GetColumnIndexes(filter_plan.GetPredicate(), column_indexes_map);
+
+  // std::size_t i = 0;
+  // FIXME(gukele): 应该是做一个类似稳定排序的稳定一样，列裁剪后保持之前的相对顺序
+  // for (auto &[old_column_index, _] : column_indexes_map) {
+  //   if (auto iter = father_column_indexes_map.find(old_column_index); iter != father_column_indexes_map.end()) {
+  //     iter->second = i;
+  //   }
+  //   new_columns.emplace_back(plan->OutputSchema().GetColumn(old_column_index));
+  //   ++i;
+  // }
+
+  // Filter本身是不做裁剪的！！只有其孩子做裁剪，自己schema和孩子schema一样
+  std::vector<uint32_t> old_indexes;  // 为了稳定性，保持列裁剪后相对位置不改变
+  old_indexes.reserve(column_indexes_map.size());
+  for (auto &[old_index, _] : column_indexes_map) {
+    old_indexes.emplace_back(old_index);
+  }
+  std::sort(old_indexes.begin(), old_indexes.end());
+  std::vector<Column> new_columns;
+  new_columns.reserve(column_indexes_map.size());
+  for (std::size_t i = 0; i < old_indexes.size(); ++i) {
+    if (auto iter = father_column_indexes_map.find(old_indexes[i]); iter != father_column_indexes_map.end()) {
+      iter->second = i;
+    }
+    new_columns.emplace_back(plan->OutputSchema().GetColumn(old_indexes[i]));
+  }
+
+  auto new_schema = std::make_shared<Schema>(new_columns);
+  BUSTUB_ASSERT(new_schema->GetColumnCount() == column_indexes_map.size(),
+                "filter不进行裁剪，自己schema和孩子schema一样");
+
+  auto new_child = OptimizeColumnPruningForAnyType(filter_plan.GetChildPlan(), column_indexes_map);
+
+  // 孩子修改完column_indexes_map才能重写表达式
+  auto new_expr = RewriteExpressionForColumnPruning(filter_plan.GetPredicate(), column_indexes_map);
+
+  // return std::make_shared<FilterPlanNode>(std::move(new_schema), std::move(new_expr), std::move(new_child));
+  return std::make_shared<FilterPlanNode>(std::move(new_schema), std::move(new_expr), std::move(new_child));
+}
+
+auto Optimizer::OptimizeColumnPruningForProjection(const AbstractPlanNodeRef &plan,
+                                                   std::unordered_map<uint32_t, uint32_t> &father_column_indexes_map)
+    -> AbstractPlanNodeRef {
+  BUSTUB_ASSERT(plan->GetType() == PlanType::Projection && !father_column_indexes_map.empty(),
+                "Plan should be Projection and father_column_indexes_map should not empty!");
+  const auto &projection_plan = dynamic_cast<const ProjectionPlanNode &>(*plan);
+
+  // 父亲需要我的第几列，映射到我孩子的第几列
+  std::unordered_map<uint32_t, uint32_t> column_indexes_map;
+  for (const auto &[index, _] : father_column_indexes_map) {
+    // BUSTUB_ASSERT(dynamic_cast<ConstantValueExpression *>(projection_plan.GetExpressions()[index].get()) == nullptr,
+    //               "projection expr 出现了constant value expr");
+    if (auto constant_expr = dynamic_cast<ConstantValueExpression *>(projection_plan.GetExpressions()[index].get());
+        constant_expr != nullptr) {
+    } else {
+      GetColumnIndexes(projection_plan.GetExpressions()[index], column_indexes_map);
+    }
+  }
+
+  // 修改father_column_indexes_map、裁剪schema、裁剪exprs
+  std::vector<Column> new_columns;
+  new_columns.reserve(father_column_indexes_map.size());
+  std::vector<AbstractExpressionRef> new_exprs;
+  new_exprs.reserve(father_column_indexes_map.size());
+  // std::size_t i = 0;
+  // FIXME(gukele): 应该是做一个类似稳定排序的稳定一样，列裁剪后保持之前的相对顺序,不想改成红黑树map
+  // for (auto &[old_column_index, new_column_index] : father_column_indexes_map) {
+  //   new_column_index = i++;
+  //   new_columns.emplace_back(projection_plan.OutputSchema().GetColumn(old_column_index));
+  // }
+  std::vector<uint32_t> old_indexes;  // 为了稳定性，保持列裁剪后相对位置不改变
+  old_indexes.reserve(column_indexes_map.size());
+  for (auto &[old_index, _] : father_column_indexes_map) {
+    old_indexes.emplace_back(old_index);
+  }
+  std::sort(old_indexes.begin(), old_indexes.end());
+  for (std::size_t i = 0; i < old_indexes.size(); ++i) {
+    father_column_indexes_map[old_indexes[i]] = i;
+    new_columns.emplace_back(projection_plan.OutputSchema().GetColumn(old_indexes[i]));
+    new_exprs.emplace_back(projection_plan.GetExpressions()[old_indexes[i]]);
+  }
+
+  auto new_schema = std::make_shared<Schema>(new_columns);
+
+  auto new_child = OptimizeColumnPruningForAnyType(projection_plan.GetChildPlan(), column_indexes_map);
+
+  // 孩子修改完column_indexes_map才能重写表达式
+  for (auto &expr : new_exprs) {
+    expr = (RewriteExpressionForColumnPruning(expr, column_indexes_map));
+  }
+
+  return std::make_shared<ProjectionPlanNode>(std::move(new_schema), std::move(new_exprs), std::move(new_child));
+}
+
+auto Optimizer::OptimizeColumnPruningForAggregation(const AbstractPlanNodeRef &plan,
+                                                    std::unordered_map<uint32_t, uint32_t> &father_column_indexes_map)
+    -> AbstractPlanNodeRef {
+  BUSTUB_ASSERT(plan->GetType() == PlanType::Aggregation && !father_column_indexes_map.empty(),
+                "Plan should be Aggregation and father_column_indexes_map should not empty!");
+  const auto &agg_plan = dynamic_cast<const AggregationPlanNode &>(*plan);
+  // auto column_indexes_map = father_column_indexes_map;
+
+  // 添加父亲所需聚合函数，同时找出父亲所需要的group by key
+  // TODO(gukele): 只保留父亲需要的group by key
+  std::unordered_map<uint32_t, uint32_t> column_indexes_map;
+  // std::unordered_map<uint32_t, uint32_t> group_bys_of_father_need;
+  const auto &aggregations = agg_plan.GetAggregates();
+  const auto &group_bys = agg_plan.GetGroupBys();
+  // NOTE(gukele): bug?明明是复制的map的key,但是index却是const uint32_t
+  // const int a = 10;
+  // auto b = a;  // a是const int, b是int
+  for (auto [index, _] : father_column_indexes_map) {
+    // BUSTUB_ASSERT(dynamic_cast<ConstantValueExpression *>(projection_plan.GetExpressions()[index].get()) == nullptr,
+    // "projection expr 出现了constant value expr"); output schema 是 (group bys + aggregations)
+    if (index >= group_bys.size()) {  // 不需要现在计算key,因为key是本plan node一定需要，不管父节点是否需要
+      BUSTUB_ASSERT(aggregations.size() > index - group_bys.size(), "应该大于");
+      GetColumnIndexes(aggregations[index - group_bys.size()], column_indexes_map);
+    } else {
+      // GetColumnIndexes(group_bys[index], group_bys_of_father_need);
+    }
+  }
+
+  // 聚合函数去重
+  // std::unordered_map<uint32_t, uint32_t> aggregation_map;
+  const auto &agg_types = agg_plan.GetAggregateTypes();
+  // FIXME(gukele): unordered_map
+  // 相同AggregationType、使用相同列的aggregation放在一起，方便去重
+  std::map<std::pair<AggregationType, uint32_t>, std::size_t> unique_agg;
+  std::vector<std::size_t> constant_agg;
+  for (std::size_t i = 0; i < aggregations.size(); ++i) {
+    if (auto column_value_expr = dynamic_cast<ColumnValueExpression *>(aggregations[i].get());
+        column_value_expr != nullptr) {
+      std::pair<AggregationType, uint32_t> key = {agg_types[i], column_value_expr->GetColIdx()};
+      if (unique_agg.find(key) == unique_agg.end()) {
+        unique_agg[key] = i;
+      }
+    } else if (auto constant_value_expr = dynamic_cast<ConstantValueExpression *>(aggregations[i].get());
+               constant_value_expr != nullptr) {
+      // 聚合函数中出现常数的情况 count(常数) == count(*) == count(1)
+      constant_agg.emplace_back(i);
+    } else if (auto arithmetic_expr = dynamic_cast<ArithmeticExpression *>(aggregations[i].get());
+               arithmetic_expr != nullptr) {
+      // TODO(gukele): 目前只处理聚合函数中出现一个列或者count(*、常数)的情况,
+      // 如果出现sum(#0.0 + #0.3)类似的情况先不处理，不进行裁剪了
+      std::unordered_map<uint32_t, uint32_t> unused;
+      return OptimizeColumnPruningForAnyType(plan, unused);
+    } else {
+      throw ExecutionException("聚合函数中出现 非column value expr、非constant value expr、非arithmetic expr");
+    }
+  }
+
+  // group by key
+  for (const auto &expr : group_bys) {
+    // if(auto column_value_expr = dynamic_cast<ColumnValueExpression *>(expr.get()); column_value_expr != nullptr) {
+    //   // BUSTUB_ASSERT(column_value_expr != nullptr, "Aggregate expr should be ColumnValueExpr");
+    //   column_indexes_map[column_value_expr->GetColIdx()] = column_value_expr->GetColIdx();
+    // } else {
+    //   throw ExecutionException("Group by non-column value expr");
+    // }
+    GetColumnIndexes(expr, column_indexes_map);
+  }
+
+  // 重写agg_types、重写schema(group bys + aggregations)
+  std::vector<AggregationType> new_agg_types;
+  new_agg_types.reserve(unique_agg.size() + constant_agg.size());
+  const auto &columns = agg_plan.OutputSchema().GetColumns();
+  // group bys不变
+  std::vector<Column> new_columns(columns.begin(), columns.begin() + group_bys.size());
+  BUSTUB_ASSERT(new_columns.size() == group_bys.size(), "should same!");
+  new_columns.reserve(group_bys.size() + unique_agg.size() + constant_agg.size());
+  std::vector<AbstractExpressionRef> new_aggregations;
+  new_aggregations.reserve(unique_agg.size() + constant_agg.size());
+  std::unordered_map<uint32_t, std::size_t> new_indexes;
+  std::size_t new_index = 0;
+
+  // for (const auto &[_, unique_old_index] : unique_agg) {
+  //   new_indexes[unique_old_index] = new_index++;
+  //   new_agg_types.emplace_back(agg_types[unique_old_index]);
+  //   new_columns.emplace_back(columns[unique_old_index + group_bys.size()]);
+  // }
+  // for (const auto &constant_old_index : constant_agg) {
+  //   new_indexes[constant_old_index] = new_index++;
+  //   new_agg_types.emplace_back(agg_types[constant_old_index]);
+  //   new_columns.emplace_back(columns[constant_old_index + group_bys.size()]);
+  // }
+
+  // FIXME(gukele): 应该是做一个类似稳定排序的稳定一样，去重后保持之前的相对顺序
+  std::vector<std::size_t> old_indexes;
+  old_indexes.reserve(unique_agg.size() + constant_agg.size());
+  for (const auto &[_, unique_old_index] : unique_agg) {
+    old_indexes.emplace_back(unique_old_index);
+  }
+  for (const auto &constant_old_index : constant_agg) {
+    old_indexes.emplace_back(constant_old_index);
+  }
+  std::sort(old_indexes.begin(), old_indexes.end());
+
+  for (const auto &old_index : old_indexes) {
+    new_indexes[old_index] = group_bys.size() + new_index++;
+    new_agg_types.emplace_back(agg_types[old_index]);
+    new_columns.emplace_back(columns[old_index + group_bys.size()]);
+    new_aggregations.emplace_back(aggregations[old_index]);
+  }
+
+  auto new_schema = std::make_shared<Schema>(new_columns);
+
+  BUSTUB_ASSERT(new_schema->GetColumns().size() == group_bys.size() + unique_agg.size() + constant_agg.size(),
+                "size same!");
+
+  // 修改father_column_indexes_map
+  for (auto &[old_index, new_index] : father_column_indexes_map) {
+    if (old_index >= group_bys.size()) {  // 聚合函数产生的列才需要变
+      auto agg_index = old_index - group_bys.size();
+      if (auto column_value_expr = dynamic_cast<ColumnValueExpression *>(aggregations[agg_index].get());
+          column_value_expr != nullptr) {
+        if (column_value_expr != nullptr) {
+          // BUSTUB_ASSERT(column_value_expr != nullptr, "Aggregate expr should be ColumnValueExpr");
+          std::pair<AggregationType, uint32_t> key = {agg_types[agg_index], column_value_expr->GetColIdx()};
+          new_index = new_indexes[unique_agg[key]];
+        } else {
+          // throw ExecutionException("222聚合函数中出现非column value expr");
+          new_index = new_indexes[old_index];
+        }
+      }
+    }
+  }
+
+  auto new_child = OptimizeColumnPruningForAnyType(agg_plan.GetChildPlan(), column_indexes_map);
+
+  // 孩子修改完column_indexes_map才能重写表达式
+  // 重写group by
+  std::vector<AbstractExpressionRef> new_group_bys;
+  new_group_bys.reserve(group_bys.size());
+  for (const auto &group_by : group_bys) {
+    new_group_bys.emplace_back(RewriteExpressionForColumnPruning(group_by, column_indexes_map));
+  }
+  // 重写aggregations
+  for (auto &agg : new_aggregations) {
+    agg = RewriteExpressionForColumnPruning(agg, column_indexes_map);
+  }
+
+  return std::make_shared<AggregationPlanNode>(std::move(new_schema), std::move(new_child), std::move(new_group_bys),
+                                               std::move(new_aggregations), std::move(new_agg_types));
+}
+
+auto Optimizer::RewriteExpressionForColumnPruning(
+    const AbstractPlanNodeRef &plan, const std::unordered_map<uint32_t, uint32_t> &indexes_map,
+    const std::unordered_map<uint32_t, uint32_t> &indexes_map_for_join_right) -> AbstractPlanNodeRef {
+  switch (plan->GetType()) {
+    case PlanType::Aggregation: {
+      const auto &agg_plan = dynamic_cast<const AggregationPlanNode &>(*plan);
+      const auto &group_bys = agg_plan.GetGroupBys();
+      const auto &aggregations = agg_plan.GetAggregates();
+      std::vector<AbstractExpressionRef> new_group_bys;
+      // 重写group_bys
+      new_group_bys.reserve(group_bys.size());
+      for (const auto &group_by : group_bys) {
+        new_group_bys.emplace_back(RewriteExpressionForColumnPruning(group_by, indexes_map));
+      }
+      // 重写aggregations
+      std::vector<AbstractExpressionRef> new_aggregations;
+      new_aggregations.reserve(aggregations.size());
+      for (const auto &agg : aggregations) {
+        new_aggregations.emplace_back(RewriteExpressionForColumnPruning(agg, indexes_map));
+      }
+      return std::make_shared<AggregationPlanNode>(agg_plan.output_schema_, agg_plan.GetChildPlan(),
+                                                   std::move(new_group_bys), std::move(new_aggregations),
+                                                   agg_plan.GetAggregateTypes());
+    } break;
+    case PlanType::Filter: {
+      const auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*plan);
+      auto new_expr = RewriteExpressionForColumnPruning(filter_plan.GetPredicate(), indexes_map);
+      return std::make_shared<FilterPlanNode>(filter_plan.output_schema_, std::move(new_expr),
+                                              filter_plan.GetChildPlan());
+    } break;
+    case PlanType::Projection: {
+      const auto &projection_plan = dynamic_cast<const ProjectionPlanNode &>(*plan);
+      std::vector<AbstractExpressionRef> new_exprs;
+      for (const auto &expr : projection_plan.GetExpressions()) {
+        new_exprs.emplace_back(RewriteExpressionForColumnPruning(expr, indexes_map));
+      }
+      return std::make_shared<ProjectionPlanNode>(projection_plan.output_schema_, std::move(new_exprs),
+                                                  projection_plan.GetChildPlan());
+    } break;
+    case PlanType::Sort: {
+      const auto &sort_plan = dynamic_cast<const SortPlanNode &>(*plan);
+      const auto &order_bys = sort_plan.GetOrderBy();
+      std::vector<std::pair<OrderByType, AbstractExpressionRef>> new_order_bys;
+      new_order_bys.reserve(order_bys.size());
+      for (const auto &[order_by_type, order_by] : order_bys) {
+        new_order_bys.emplace_back(order_by_type, RewriteExpressionForColumnPruning(order_by, indexes_map));
+      }
+      return std::make_shared<SortPlanNode>(sort_plan.output_schema_, sort_plan.GetChildPlan(),
+                                            std::move(new_order_bys));
+    } break;
+    case PlanType::NestedLoopJoin: {
+      const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*plan);
+      auto new_predicate =
+          RewriteExpressionForColumnPruningJoin(nlj_plan.Predicate(), indexes_map, indexes_map_for_join_right);
+      return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetLeftPlan(),
+                                                      nlj_plan.GetRightPlan(), std::move(new_predicate),
+                                                      nlj_plan.GetJoinType());
+    } break;
+    case PlanType::Insert:
+    case PlanType::Delete:
+    case PlanType::Update:
+    case PlanType::SeqScan:
+    case PlanType::MockScan:
+      // 没有exprs的plan
+      return plan;
+      break;
+    default:
+      throw NotImplementedException(std::string("Rewriting expressions for ") +
+                                    std::to_string(static_cast<int64_t>(plan->GetType())) +
+                                    " type plan not implemented!");
+      break;
+  }
+}
+
+auto Optimizer::RewriteExpressionForColumnPruning(const AbstractExpressionRef &expr,
+                                                  const std::unordered_map<uint32_t, uint32_t> &indexes_map)
+    -> AbstractExpressionRef {
+  std::vector<AbstractExpressionRef> children;
+  for (const auto &child : expr->GetChildren()) {
+    children.emplace_back(RewriteExpressionForColumnPruning(child, indexes_map));
+  }
+  AbstractExpressionRef rewrite_expr;
+  if (auto column_value_expr = dynamic_cast<ColumnValueExpression *>(expr.get()); column_value_expr != nullptr) {
+    BUSTUB_ASSERT(indexes_map.find(column_value_expr->GetColIdx()) != indexes_map.end(),
+                  "Impossible, indexes should have all column indexes of expr");
+    if (auto iter = indexes_map.find(column_value_expr->GetColIdx()); iter->second == column_value_expr->GetColIdx()) {
+      rewrite_expr = expr->CloneWithChildren(std::move(children));
+    } else {
+      rewrite_expr = std::make_shared<ColumnValueExpression>(column_value_expr->GetTupleIdx(),
+                                                             indexes_map.find(column_value_expr->GetColIdx())->second,
+                                                             column_value_expr->GetReturnType());
+    }
+  } else {
+    rewrite_expr = expr->CloneWithChildren(std::move(children));
+  }
+  return rewrite_expr;
+}
+
+auto Optimizer::RewriteExpressionForColumnPruningJoin(const AbstractExpressionRef &expr,
+                                                      const std::unordered_map<uint32_t, uint32_t> &left_indexes_map,
+                                                      const std::unordered_map<uint32_t, uint32_t> &right_indexes_map)
+    -> AbstractExpressionRef {
+  std::vector<AbstractExpressionRef> children;
+  for (const auto &child : expr->GetChildren()) {
+    children.emplace_back(RewriteExpressionForColumnPruningJoin(child, left_indexes_map, right_indexes_map));
+  }
+  AbstractExpressionRef rewrite_expr;
+  if (auto column_value_expr = dynamic_cast<ColumnValueExpression *>(expr.get()); column_value_expr != nullptr) {
+    const std::unordered_map<uint32_t, uint32_t> *indexes_map = nullptr;
+    if (column_value_expr->GetTupleIdx() == 0) {
+      indexes_map = &left_indexes_map;
+    } else {
+      indexes_map = &right_indexes_map;
+    }
+    BUSTUB_ASSERT(indexes_map->find(column_value_expr->GetColIdx()) != indexes_map->end(),
+                  "Impossible, indexes should have all column indexes of expr");
+    rewrite_expr = std::make_shared<ColumnValueExpression>(column_value_expr->GetTupleIdx(),
+                                                           indexes_map->find(column_value_expr->GetColIdx())->second,
+                                                           column_value_expr->GetReturnType());
+  } else {
+    rewrite_expr = expr->CloneWithChildren(std::move(children));
+  }
+  return rewrite_expr;
+}
+
+void Optimizer::GetAllColumnsNeededFromChildren(const AbstractPlanNodeRef &plan,
+                                                std::unordered_map<uint32_t, uint32_t> &column_indexes_map) const {
+  switch (plan->GetType()) {
+    case PlanType::Aggregation: {
+      const auto &agg_plan = dynamic_cast<const AggregationPlanNode &>(*plan);
+      for (const auto &agg : agg_plan.GetAggregates()) {
+        GetColumnIndexes(agg, column_indexes_map);
+      }
+      for (const auto &group_by : agg_plan.GetGroupBys()) {
+        GetColumnIndexes(group_by, column_indexes_map);
+      }
+    } break;
+    case PlanType::Projection: {
+      // 作为根时，自己的每一列都需要。同时自己每一列映射到需要孩子的第几列
+      const auto &projection_plan = dynamic_cast<const ProjectionPlanNode &>(*plan);
+      for (const auto &expr : projection_plan.GetExpressions()) {
+        GetColumnIndexes(expr, column_indexes_map);
+      }
+    } break;
+    case PlanType::Filter:
+    // {
+    //   const auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*plan);
+    //   for (std::size_t i = 0; i < filter_plan.OutputSchema().GetColumnCount(); ++i) {
+    //     column_indexes_map.insert({i, i});
+    //   }
+    // } break;
+    case PlanType::Sort:
+      // {
+      //   const auto &sort_plan = dynamic_cast<const SortPlanNode &>(*plan);
+      //   const auto &order_bys = sort_plan.GetOrderBy();
+      //   for(const auto &[_, order_by] : order_bys) {
+      //     GetColumnIndexes(order_by, column_indexes_map);
+      //   }
+      // }
+      // break;
+
+      // NOTE(gukele): 作为根时自己有多少列就返回多少列，不根据父亲所需进行裁剪
+      BUSTUB_ASSERT(plan->GetChildren().size() == 1, "Must has exactly one child!");
+      for (std::size_t i = 0; i < plan->OutputSchema().GetColumnCount(); ++i) {
+        column_indexes_map.insert({i, i});
+      }
+    case PlanType::Insert:
+    case PlanType::Delete:
+    case PlanType::Update:
+      // 孩子给多少列，就需要多少列，不让孩子进行裁剪
+      for (std::size_t i = 0; i < plan->GetChildAt(0)->OutputSchema().GetColumnCount(); ++i) {
+        column_indexes_map.insert({i, i});
+      }
+      break;
+    case PlanType::MockScan:
+      BUSTUB_ENSURE(true, "mock scan 只是为了测试!");
+      break;
+    case PlanType::SeqScan:
+      // 这些类型暂时没有完成列裁剪，并且他们也没有孩子
+      // std::cout << static_cast<int>(plan->GetType()) << " type plan 不需要裁剪！" << std::endl;
+      BUSTUB_ENSURE(true, "以后再完成seq scan裁剪!");
+      break;
+    case PlanType::NestedLoopJoin: {
+      // 暂时还没完成列裁剪的
+      BUSTUB_ASSERT(plan->GetChildren().size() == 2, "Must has exactly two children!");
+      uint32_t index = 0;
+      for (const auto &child : plan->GetChildren()) {
+        for (std::size_t i = 0; i < child->OutputSchema().GetColumnCount(); ++i) {
+          column_indexes_map.insert({index, index});
+          ++index;
+        }
+      }
+    } break;
+    default:
+      // 暂时还没完成列裁剪的，我们需要孩子的所有列，output schema应该与孩子的相同
+      BUSTUB_ASSERT(plan->GetChildren().size() <= 1, "At most one child!");
+      if (!plan->GetChildren().empty()) {
+        for (std::size_t i = 0; i < plan->GetChildAt(0)->OutputSchema().GetColumnCount(); ++i) {
+          column_indexes_map.insert({i, i});
+        }
+      }
+      // std::cout << static_cast<int>(plan->GetType()) << " type plan 还未实现裁剪！" << std::endl;
+      // throw NotImplementedException(std::string("Getting column indexes for ") +
+      // std::to_string(static_cast<int64_t>(plan->GetType())) +
+      //                          " type plans not implemented!");
+      break;
+  }
+}
+
+void Optimizer::GetColumnIndexes(const AbstractExpressionRef &expr,
+                                 std::unordered_map<uint32_t, uint32_t> &column_indexes_map) const {
+  if (auto column_value_expr = dynamic_cast<ColumnValueExpression *>(expr.get()); column_value_expr != nullptr) {
+    column_indexes_map[column_value_expr->GetColIdx()] = column_value_expr->GetColIdx();
+  }
+  for (auto &child : expr->GetChildren()) {
+    GetColumnIndexes(child, column_indexes_map);
+  }
+}
+
+auto Optimizer::OptimizeFilterNLJPredicatePushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   // 应该是自顶向下
   AbstractPlanNodeRef optimized_plan = plan;
 
-  if (plan->GetType() == PlanType::Filter) {
-    auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*plan);
+  if (optimized_plan->GetType() == PlanType::Filter) {
+    auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*optimized_plan);
     if (filter_plan.GetChildPlan()->GetType() == PlanType::NestedLoopJoin) {
       auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*filter_plan.GetChildPlan());
-      if (IsPredicateTrue(nlj_plan.Predicate())) {
-        auto rewrite_expr = RewriteExpressionForJoin(filter_plan.GetPredicate(),
-                                                     nlj_plan.GetLeftPlan()->OutputSchema().GetColumnCount(),
-                                                     nlj_plan.GetRightPlan()->OutputSchema().GetColumnCount());
-        // FIXME(gukele): 目前只处理只有and logic的情况
-        if (!HasOrLogic(rewrite_expr)) {
-          auto [left_filter_expr, right_filter_expr, join_expr] =
-              RewriteExpressionForFilterPushDown(rewrite_expr);  // 返回左右孩子Plan的expression和自身的
+      auto rewrite_expr =
+          RewriteExpressionForJoin(filter_plan.GetPredicate(), nlj_plan.GetLeftPlan()->OutputSchema().GetColumnCount(),
+                                   nlj_plan.GetRightPlan()->OutputSchema().GetColumnCount());
+      // FIXME(gukele): 目前只处理只有and logic的情况
+      if (!HasOrLogic(rewrite_expr)) {
+        auto [left_filter_expr, right_filter_expr, join_expr] =
+            RewriteExpressionForFilterPushDown(rewrite_expr);  // 返回左右孩子Plan的expression和自身的
 
-          auto new_left_children_plan = nlj_plan.GetLeftPlan();
-          if (left_filter_expr) {
-            // 加一层filter
-            new_left_children_plan = std::make_shared<FilterPlanNode>(nlj_plan.GetLeftPlan()->output_schema_,
-                                                                      left_filter_expr, nlj_plan.GetLeftPlan());
-          }
-          auto new_right_children_plan = nlj_plan.GetRightPlan();
-          if (right_filter_expr) {
-            // 加一层filter
-            new_right_children_plan = std::make_shared<FilterPlanNode>(nlj_plan.GetRightPlan()->output_schema_,
-                                                                       right_filter_expr, nlj_plan.GetRightPlan());
-          }
+        auto new_left_children_plan = nlj_plan.GetLeftPlan();
+        if (left_filter_expr) {
+          // 加一层filter
+          new_left_children_plan = std::make_shared<FilterPlanNode>(nlj_plan.GetLeftPlan()->output_schema_,
+                                                                    left_filter_expr, nlj_plan.GetLeftPlan());
+        }
+        auto new_right_children_plan = nlj_plan.GetRightPlan();
+        if (right_filter_expr) {
+          // 加一层filter
+          new_right_children_plan = std::make_shared<FilterPlanNode>(nlj_plan.GetRightPlan()->output_schema_,
+                                                                     right_filter_expr, nlj_plan.GetRightPlan());
+        }
 
-          // std::cout << "left filter : \n" << left_filter->ToString() << "\n" << std::endl;
-          // std::cout << "right filter : \n" << right_filter->ToString() << "\n" << std::endl;
-          // std::cout << "NLJ : \n" << OptimizeFilterNLJPushDown(left_filter)->ToString() << "\n" << std::endl;
-          // std::cout << "NLJ : \n" << OptimizeFilterNLJPushDown(right_filter)->ToString() << "\n" << std::endl;
+        // std::cout << "left filter : \n" << left_filter->ToString() << "\n" << std::endl;
+        // std::cout << "right filter : \n" << right_filter->ToString() << "\n" << std::endl;
+        // std::cout << "NLJ : \n" << OptimizeFilterNLJPushDown(left_filter)->ToString() << "\n" << std::endl;
+        // std::cout << "NLJ : \n" << OptimizeFilterNLJPushDown(right_filter)->ToString() << "\n" << std::endl;
 
-          // OptimizeFilterNLJPushDown(left_filter);
-          // OptimizeFilterNLJPushDown(right_filter);
+        // OptimizeFilterNLJPushDown(left_filter);
+        // OptimizeFilterNLJPushDown(right_filter);
 
-          // optimized_plan = std::make_shared<NestedLoopJoinPlanNode>(filter_plan.output_schema_,
-          // OptimizeFilterNLJPushDown(left_filter), OptimizeFilterNLJPushDown(right_filter), join_expr,
-          // nlj_plan.GetJoinType());
+        // optimized_plan = std::make_shared<NestedLoopJoinPlanNode>(filter_plan.output_schema_,
+        // OptimizeFilterNLJPushDown(left_filter), OptimizeFilterNLJPushDown(right_filter), join_expr,
+        // nlj_plan.GetJoinType());
+        if (IsPredicateTrue(nlj_plan.Predicate())) {  // filter 谓词中有join predicate
           optimized_plan =
               std::make_shared<NestedLoopJoinPlanNode>(filter_plan.output_schema_, new_left_children_plan,
                                                        new_right_children_plan, join_expr, nlj_plan.GetJoinType());
-          // std::cout << "NLJ : \n" << optimized_plan->ToString() << "\n" << std::endl;
+        } else {  // filter 谓词中没有join predicate
+          BUSTUB_ASSERT(!join_expr, "Expression should not have join predicate!");
+          optimized_plan = std::make_shared<NestedLoopJoinPlanNode>(filter_plan.output_schema_, new_left_children_plan,
+                                                                    new_right_children_plan, nlj_plan.Predicate(),
+                                                                    nlj_plan.GetJoinType());
         }
+        // std::cout << "NLJ : \n" << optimized_plan->ToString() << "\n" << std::endl;
       }
     }
   }
 
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : optimized_plan->GetChildren()) {
-    children.emplace_back(OptimizeFilterNLJPushDown(child));
+    children.emplace_back(OptimizeFilterNLJPredicatePushDown(child));
   }
   optimized_plan = optimized_plan->CloneWithChildren(std::move(children));
 
@@ -845,10 +1655,32 @@ auto Optimizer::RewriteExpressionForFilterPushDown(const AbstractExpressionRef &
   return result;
 }
 
-auto Optimizer::OptimizeRemoveNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizeRemoveProjectionEmptyValues(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : plan->GetChildren()) {
-    children.emplace_back(OptimizeRemoveNLJ(child));
+    children.emplace_back(OptimizeRemoveProjectionEmptyValues(child));
+  }
+
+  auto optimized_plan = plan->CloneWithChildren(std::move(children));
+
+  if (optimized_plan->GetType() == PlanType::Projection) {
+    const auto &projection_plan = dynamic_cast<const ProjectionPlanNode &>(*optimized_plan);
+    if (projection_plan.GetChildPlan()->GetType() == PlanType::Values) {
+      const auto &values_plan = dynamic_cast<const ValuesPlanNode &>(*projection_plan.GetChildPlan());
+
+      if (values_plan.GetValues().empty()) {
+        return projection_plan.GetChildPlan();
+      }
+    }
+  }
+
+  return optimized_plan;
+}
+
+auto Optimizer::OptimizeRemoveNLJEmptyValues(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  std::vector<AbstractPlanNodeRef> children;
+  for (const auto &child : plan->GetChildren()) {
+    children.emplace_back(OptimizeRemoveNLJEmptyValues(child));
   }
 
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
@@ -880,6 +1712,8 @@ auto Optimizer::OptimizeRemoveNLJ(const AbstractPlanNodeRef &plan) -> AbstractPl
 
   return optimized_plan;
 }
+
+/*====================================others' optimization========================*/
 
 // auto Optimizer::OptimizeReorderJoinUseIndex(const AbstractPlanNodeRef &plan)
 //     -> AbstractPlanNodeRef {

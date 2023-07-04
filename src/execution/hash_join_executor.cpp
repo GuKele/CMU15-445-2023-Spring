@@ -70,6 +70,7 @@ void HashJoinExecutor::Init() {
     auto iter = right_tuples_map_.find(hash_value);
     auto count = right_tuples_map_.count(hash_value);
 
+    // FIXME(gukele): count > 0时，hash相同不意味着一定满足equal条件
     if (count == 0 && plan_->GetJoinType() == JoinType::LEFT) {
       std::vector<Value> values;
       for (uint32_t i = 0; i < left_executor_->GetOutputSchema().GetColumnCount(); ++i) {

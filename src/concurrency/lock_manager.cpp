@@ -766,7 +766,7 @@ auto LockManager::CanGrantLock(LockRequestQueue *lock_request_queue, LockRequest
 // }
 
 void LockManager::GrantNewLocksIfPossible(LockRequestQueue *lock_request_queue) {
-  throw Exception(ExceptionType::EXECUTION, "not implemented");
+  throw NotImplementedException("GrantNewLocksIfPossible not implemented");
 }
 
 /*

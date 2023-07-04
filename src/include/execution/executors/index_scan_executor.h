@@ -54,7 +54,7 @@ class IndexScanExecutor : public AbstractExecutor {
   // BPlusTreeIndexForTwoIntegerColumn *tree_;
 
   TableInfo *table_info_;
-  // FIXME(gukele): 索引扫描如何加锁！这里直接没有考虑并发的情况
+  // FIXME(gukele): 索引扫描如何加锁！这里直接没有考虑并发的情况，应该是只有begin iterator,直到找到第一个不满足索引
   // 开闭区间[iter_, iter_end_)
   BPlusTreeIndexIteratorForTwoIntegerColumn iter_;
   BPlusTreeIndexIteratorForTwoIntegerColumn iter_end_;
