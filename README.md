@@ -1,3 +1,7 @@
+完成了除了primer的所有实验，P2、P3、P4在leader board获取了较好的排名。P1没有做优化。
+
+
+
 <img src="logo/bustub-whiteborder.svg" alt="BusTub Logo" height="200">
 
 -----------------
