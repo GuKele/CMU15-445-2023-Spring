@@ -16,14 +16,14 @@ add_custom_target(build-tests COMMAND ${CMAKE_CTEST_COMMAND} --show-only)
 add_custom_target(check-tests COMMAND ${CMAKE_CTEST_COMMAND} --verbose)
 add_custom_target(check-public-ci-tests COMMAND ${CMAKE_CTEST_COMMAND} --verbose -E "\"SQLLogicTest|Trie|BPlusTreeContentionTest\"")
 
-# set(CMAKE_BUILD_TYPE "Debug")
+# set(CMAKE_BUILD_TYPE "Debug") 
 
 # #########################################
 # "make XYZ_test"
 # #########################################
 foreach (bustub_test_source ${BUSTUB_TEST_SOURCES})
     # Create a human readable name.
-    get_filename_component(bustub_test_filename ${bustub_test_source} NAME)
+    get_filename_component(bustub_test_filename ${bustub_test_source} NAME) # NAME 没有目录的文件名 # NAME_WE 没有目录和扩展名的文件名
     string(REPLACE ".cpp" "" bustub_test_name ${bustub_test_filename})
 
     # 为每个test文件增加一个make目标
