@@ -383,7 +383,13 @@ auto LockManager::HasCycle(txn_id_t *abort_txn_id) -> bool {
   // 两种方案，一种是全局的visited(visited过的点也表示安全了),当DFS发现了环，就从visited中把发现环的path中的点从visited中删除。
   // 避免了每次都重新遍历图，但是不可避免的每次HasCycle都需要遍历点。
   // 另一种方案是我们用unvisited，但是优化应该不大
+  std::vector<txn_id_t> vertexes;
+  vertexes.reserve(waits_for_.size());
   for (const auto &[source_txn, _] : waits_for_) {
+    vertexes.push_back(source_txn);
+  }
+  std::sort(vertexes.begin(), vertexes.end());
+  for (const auto &source_txn : vertexes) {
     if (visited_.find(source_txn) == visited_.end()) {
       std::unordered_set<txn_id_t> on_path{};
       std::vector<txn_id_t> path;
@@ -435,8 +441,8 @@ void LockManager::RunCycleDetection() {
         }
 
         // 2.更新wait_for_
-        // RemoveVertex(abort_txn_id);
         // 我们为了死锁检测其实不一定真的把那个点删除，我们用visited将其标记为安全就行了，或者只删除出边
+        // RemoveVertex(abort_txn_id);
         visited_.insert(abort_txn_id);
       }
       std::lock_guard<std::mutex> guard(waits_for_latch_);
@@ -905,7 +911,9 @@ auto LockManager::FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, st
   on_path.insert(source_txn);
   visited.insert(source_txn);
   if (auto iter = waits_for_.find(source_txn); iter != waits_for_.end()) {
-    for (const auto &neighbor : iter->second) {
+    std::vector<txn_id_t> neighbours(iter->second.begin(), iter->second.end());
+    std::sort(neighbours.begin(), neighbours.end());
+    for (const auto &neighbor : neighbours) {
       if (visited.find(neighbor) == visited.end()) {
         if (FindCycle(neighbor, path, on_path, visited, abort_txn_id)) {
           visited.erase(source_txn);  // 表示下次还需要重新dfs这个点,source_txn不一定是安全无环的

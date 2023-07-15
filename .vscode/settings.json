@@ -4,6 +4,7 @@
     "INDEXITERATOR",
     "Innodb",
     "leaderboard",
+    "neighbours",
     "TINYINT",
     "wtype"
   ]

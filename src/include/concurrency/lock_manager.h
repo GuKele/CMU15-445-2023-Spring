@@ -411,8 +411,9 @@ class LockManager {
 
   auto CheckNotHoldAppropriateLockOnRow(Transaction *txn, const table_oid_t &oid, LockMode table_lock_mode) -> bool;
 
-  [[unused]] auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path, std::unordered_set<txn_id_t> &visited,
-                    std::unordered_set<txn_id_t> &connected_component) -> bool;
+  [[unused]] auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path,
+                               std::unordered_set<txn_id_t> &visited, std::unordered_set<txn_id_t> &connected_component)
+      -> bool;
 
   [[unused]] auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path,
                                std::unordered_set<txn_id_t> &unvisited, txn_id_t *abort_txn_id) -> bool;
@@ -468,19 +469,11 @@ class LockManager {
   std::atomic<bool> enable_cycle_detection_;
   std::thread *cycle_detection_thread_;
   /** Waits-for graph representation. */
-  // std::unordered_map<txn_id_t, std::unordered_set<txn_id_t>> waits_for_;
-  // 使用红黑树是因为测试需要有序从小到大的找环(想先解决先开始事务中可能存在的环，因为早开始的等待时间较久了)
-  // 如果用hash然后每次都排序感觉不如红黑树。
-  std::map<txn_id_t, std::set<txn_id_t>> waits_for_;
+  std::unordered_map<txn_id_t, std::unordered_set<txn_id_t>> waits_for_;
+  // std::map<txn_id_t, std::set<txn_id_t>> waits_for_;
   // std::map<txn_id_t, std::vector<txn_id_t>> waits_for_;
-
   std::unordered_map<txn_id_t, table_oid_t> waits_for_table_;  // 记录每一个等待加锁的事务当前请求的加锁的表
   std::unordered_map<txn_id_t, RID> waits_for_row_;  // 记录每一个等待加锁的事务当前请求的加锁的行
-
-  // 所以使用了unsafe_nodes_来优化时间，只有当从一个点DFS没有发现环，那么这次DFS遍历到的点都是安全的
-  // 实际上我们可以使用unvisited来实现，visited + unsafe_nodes_
-  // std::unordered_set<txn_id_t> unsafe_nodes_;
-
   std::unordered_set<txn_id_t> visited_;
   std::mutex waits_for_latch_;  // 只有一个死锁检测线程，目前没有必要上锁
 };
