@@ -93,9 +93,10 @@ class Page {
   inline void ResetMemory() { memset(data_, OFFSET_PAGE_START, BUSTUB_PAGE_SIZE); }
 
   /** The actual data that is stored within a page. */
-  // Usually this should be stored as `char data_[BUSTUB_PAGE_SIZE]{};`. But to enable ASAN to detect page overflow,
+  // Usually this should be stored as `char data_[BUSTUB_PAGE_SIZE]{};`. But to enable ASan to detect page overflow,
   // we store it as a ptr.
-  // b+树中，data_就是b+树的一个node
+  // b+树中，data_就是指向b+树的一个叶子或非叶子节点. table heap中就是一个指向TablePage的指针.
+  // 总之就是一个指向一整块page的指针
   char *data_;
   /** The ID of this page. */
   page_id_t page_id_ = INVALID_PAGE_ID;

@@ -380,46 +380,51 @@ void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
   }
 }
 
+// auto LockManager::HasCycle(txn_id_t *abort_txn_id) -> bool {
+//   // TODO(gukele): cmu的测试会只使用AddEdge、RemoveEdge、HasCycle去测试，所以AddEdge、RemoveEdge也要修改
+//   // TODO(gukele): 使用一个全局的unvisited/visited，并且不保留环的路径，似乎无法找到全部的环，
+//   // 例如2->3->4->2, 3->5->3, 2->6->2这样一个图，存在三个环，第一次HasCycle后发现了环，并且删除了边4,
+//   // 下次调用HasCycle时unvisited中只有5和6了，找不到第二个和第三个环,所以我们需要从上次发现环的路径继续开始
+//   std::lock_guard<std::mutex> guard(waits_for_latch_);
+
+//   // 再例如2->5->3->4->2  2->6->2  2->7->2  4->8->4 如果找到了第一个环，删除了点5，
+//   // 如果从删除的点开始继续寻找，那么4->8->4的环就丢了
+
+//   // 所以我们应该用最笨得方法，每次HasCycle都是重新DFS整个图寻找是否有环？
+
+//   // 优化1，当DFS一个极大连通子图(连通分量)都没有发现环的时候，那么整个极大连通子图的点下次就没有必要DFS了
+
+//   // 优化2
+
+//   while (!unsafe_nodes_.empty()) {
+//     // TODO(gukele): sort for test
+//     std::vector<txn_id_t> unsafe_nodes(unsafe_nodes_.begin(), unsafe_nodes_.end());
+//     std::sort(unsafe_nodes.begin(), unsafe_nodes.end());
+//     for (const auto &source_txn : unsafe_nodes) {
+//       std::unordered_set<txn_id_t> on_path{};
+//       std::unordered_set<txn_id_t> visited{};
+//       std::unordered_set<txn_id_t> connected_component{};  // source_txn开始dfs遍历到的所有的点，连通子图
+//       if (DFSFindCycle(source_txn, on_path, visited, connected_component)) {
+//         *abort_txn_id = *on_path.begin();
+//         for (const auto &txn_id : on_path) {
+//           *abort_txn_id = std::max(*abort_txn_id, txn_id);
+//         }
+//         // RemoveVertex(*abort_txn_id);
+//         return true;
+//       }
+//       // source_txn所在的连通子图已经不存在环了
+//       for (const auto &safe_node : connected_component) {
+//         unsafe_nodes_.erase(safe_node);
+//       }
+//     }
+//   }
+
+//   return false;
+// }
+
+
 auto LockManager::HasCycle(txn_id_t *abort_txn_id) -> bool {
-  // TODO(gukele): cmu的测试会只使用AddEdge、RemoveEdge、HasCycle去测试，所以AddEdge、RemoveEdge也要修改
-  // TODO(gukele): 使用一个全局的unvisited/visited，并且不保留环的路径，似乎无法找到全部的环，
-  // 例如2->3->4->2, 3->5->3, 2->6->2这样一个图，存在三个环，第一次HasCycle后发现了环，并且删除了边4,
-  // 下次调用HasCycle时unvisited中只有5和6了，找不到第二个和第三个环,所以我们需要从上次发现环的路径继续开始
-  std::lock_guard<std::mutex> guard(waits_for_latch_);
-
-  // 再例如2->5->3->4->2  2->6->2  2->7->2  4->8->4 如果找到了第一个环，删除了点5，
-  // 如果从删除的点开始继续寻找，那么4->8->4的环就丢了
-
-  // 所以我们应该用最笨得方法，每次HasCycle都是重新DFS整个图寻找是否有环？
-
-  // 优化1，当DFS一个极大连通子图(连通分量)都没有发现环的时候，那么整个极大连通子图的点下次就没有必要DFS了
-
-  // 优化2
-
-  while (!unsafe_nodes_.empty()) {
-    // TODO(gukele): sort for test
-    std::vector<txn_id_t> unsafe_nodes(unsafe_nodes_.begin(), unsafe_nodes_.end());
-    std::sort(unsafe_nodes.begin(), unsafe_nodes.end());
-    for (const auto &source_txn : unsafe_nodes) {
-      // for(const auto &source_txn : unsafe_nodes_) {
-      std::unordered_set<txn_id_t> on_path{};
-      std::unordered_set<txn_id_t> visited{};
-      std::unordered_set<txn_id_t> connected_component{};  // 连通分量(极大连通子图)
-      if (DFSFindCycle(source_txn, on_path, visited, connected_component)) {
-        *abort_txn_id = *on_path.begin();
-        for (const auto &txn_id : on_path) {
-          *abort_txn_id = std::max(*abort_txn_id, txn_id);
-        }
-        // RemoveVertex(*abort_txn_id);
-        return true;
-      }
-      // source_txn所在的极大连通子图已经不存在环了
-      for (const auto &safe_node : connected_component) {
-        unsafe_nodes_.erase(safe_node);
-      }
-    }
-  }
-  return false;
+  
 }
 
 auto LockManager::GetEdgeList() -> std::vector<std::pair<txn_id_t, txn_id_t>> {
@@ -923,6 +928,15 @@ auto LockManager::DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t>
   }
   return false;
 }
+
+auto LockManager::FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path,
+                            std::unordered_set<txn_id_t> &on_path,
+                            std::unordered_set<txn_id_t> &visited,
+                            txn_id_t *abort_txn_id) -> bool {
+
+  return false;
+}
+
 
 void LockManager::RemoveVertex(txn_id_t txn_id) {
   std::lock_guard<std::mutex> guard(waits_for_latch_);

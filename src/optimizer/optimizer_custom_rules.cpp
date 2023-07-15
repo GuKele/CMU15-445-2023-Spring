@@ -64,7 +64,7 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
 
   {
     p = OptimizeEliminateTrueFilter(p);
-    p = OptimizeEliminateFalseFilter(p);  // 可能产生空empty ValuesPlan
+    p = OptimizeEliminateFalseFilter(p);  // 可能产生空empty Values Plan
   }
 
   {

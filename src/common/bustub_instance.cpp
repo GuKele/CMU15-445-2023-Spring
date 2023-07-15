@@ -227,11 +227,25 @@ auto BustubInstance::ExecuteSqlTxn(const std::string &sql, ResultWriter &writer,
 
   /*
    // TODO(gukele): 仔细研究一下具体的执行过程
-   // NOTE(gukele):
    * 1. Parser
    * 2. Binder
    * 3. Planer
    * 4. Optimizer
+   */
+
+  /*
+   * 1.首先是使用了第三方的库libpg_query（用于访问服务器外部PostgreSQL解析器的C库。）去parserSQL语句，
+   * 生成AST(Abstract syntax tree,抽象语法树)。
+   *
+   * 2.然后再通过Binder会将标识符绑定到数据库实体上（表名、列名），然后把这个 AST 改写成 BusTub可以理解的一个更高级的BusTub AST。
+   *
+   * 3.Planner 递归遍历 Binder 产生的 BusTub AST，产生一个初步的查询计划。不分 logical plan node 和 physical plan node。
+   * BusTub 的 SQL 层里面有 planner 和 optimizer。通常在这种设计中，planner 生成 logical plan node，
+   * 然后通过 optimizer 框架做很多步优化产生 physical plan node。但是 BusTub 只是个教学项目，所以我们只有 physical plan node。
+   * Planner 会直接把 join plan 成 NestedLoopJoin，在 optimizer 里面改写成 HashJoin 或者 NestedIndexJoin。
+   *
+   * 4. BusTub optimizer 是一个 rule-based 优化器。我们将不同的 rule 按顺序应用到当前的执行计划上，产生最终的执行计划。
+   * 每一条 rule由开发者手动实现，我们并不提供一个通用的改写框架。目前大部分 rule 实现的方式都是bottom-up，自下而上改写整个 query plan。
    */
 
   std::shared_lock<std::shared_mutex> l(catalog_lock_);
