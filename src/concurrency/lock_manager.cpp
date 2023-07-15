@@ -365,66 +365,34 @@ void LockManager::ReleaseLocks(Transaction *txn) {
 void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {
   std::lock_guard<std::mutex> guard(waits_for_latch_);
   waits_for_[t1].insert(t2);
-  // TODO(gukele): just for test
-  unsafe_nodes_.insert(t1);
 }
 
 void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
   std::lock_guard<std::mutex> guard(waits_for_latch_);
   if (auto iter = waits_for_.find(t1); iter != waits_for_.end()) {
     iter->second.erase(t2);
-    // TODO(gukele): just for test
-    if (iter->second.empty()) {
-      unsafe_nodes_.erase(t1);
-    }
   }
 }
 
-// auto LockManager::HasCycle(txn_id_t *abort_txn_id) -> bool {
-//   // TODO(gukele): cmu的测试会只使用AddEdge、RemoveEdge、HasCycle去测试，所以AddEdge、RemoveEdge也要修改
-//   // TODO(gukele): 使用一个全局的unvisited/visited，并且不保留环的路径，似乎无法找到全部的环，
-//   // 例如2->3->4->2, 3->5->3, 2->6->2这样一个图，存在三个环，第一次HasCycle后发现了环，并且删除了边4,
-//   // 下次调用HasCycle时unvisited中只有5和6了，找不到第二个和第三个环,所以我们需要从上次发现环的路径继续开始
-//   std::lock_guard<std::mutex> guard(waits_for_latch_);
-
-//   // 再例如2->5->3->4->2  2->6->2  2->7->2  4->8->4 如果找到了第一个环，删除了点5，
-//   // 如果从删除的点开始继续寻找，那么4->8->4的环就丢了
-
-//   // 所以我们应该用最笨得方法，每次HasCycle都是重新DFS整个图寻找是否有环？
-
-//   // 优化1，当DFS一个极大连通子图(连通分量)都没有发现环的时候，那么整个极大连通子图的点下次就没有必要DFS了
-
-//   // 优化2
-
-//   while (!unsafe_nodes_.empty()) {
-//     // TODO(gukele): sort for test
-//     std::vector<txn_id_t> unsafe_nodes(unsafe_nodes_.begin(), unsafe_nodes_.end());
-//     std::sort(unsafe_nodes.begin(), unsafe_nodes.end());
-//     for (const auto &source_txn : unsafe_nodes) {
-//       std::unordered_set<txn_id_t> on_path{};
-//       std::unordered_set<txn_id_t> visited{};
-//       std::unordered_set<txn_id_t> connected_component{};  // source_txn开始dfs遍历到的所有的点，连通子图
-//       if (DFSFindCycle(source_txn, on_path, visited, connected_component)) {
-//         *abort_txn_id = *on_path.begin();
-//         for (const auto &txn_id : on_path) {
-//           *abort_txn_id = std::max(*abort_txn_id, txn_id);
-//         }
-//         // RemoveVertex(*abort_txn_id);
-//         return true;
-//       }
-//       // source_txn所在的连通子图已经不存在环了
-//       for (const auto &safe_node : connected_component) {
-//         unsafe_nodes_.erase(safe_node);
-//       }
-//     }
-//   }
-
-//   return false;
-// }
-
-
 auto LockManager::HasCycle(txn_id_t *abort_txn_id) -> bool {
-  
+  // 我们在DFS的某一PATH中发现了环，不意味着该PATH中点不在别的环上。
+  // 例如 2->7 2->3->4->5->4 2->3->4->6->2。例如发现2->3->4->5->4上存在环，解除死锁后，2还在别的环路上
+  // 我们从一个点开始DFS如果没有发现环，那么说明从该点开始的DFS遍历到的点都是安全的，绝对不会存在于环中，反证法可得。
+  // 例如 2->3->4 5->3,我们从3开始DFS没有发现环，那么3,4都是安全的
+  // 因为需要多次调用HasCycle,如果不优化，相当于每次都重新遍历图去找环，假设一个时刻已经开启但未结束的事务有很多，那么图也会很大。
+  // 两种方案，一种是全局的visited(visited过的点也表示安全了),当DFS发现了环，就从visited中把发现环的path中的点从visited中删除。
+  // 避免了每次都重新遍历图，但是不可避免的每次HasCycle都需要遍历点。
+  // 另一种方案是我们用unvisited，但是优化应该不大
+  for (const auto &[source_txn, _] : waits_for_) {
+    if (visited_.find(source_txn) == visited_.end()) {
+      std::unordered_set<txn_id_t> on_path{};
+      std::vector<txn_id_t> path;
+      if (FindCycle(source_txn, path, on_path, visited_, abort_txn_id)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 auto LockManager::GetEdgeList() -> std::vector<std::pair<txn_id_t, txn_id_t>> {
@@ -467,13 +435,15 @@ void LockManager::RunCycleDetection() {
         }
 
         // 2.更新wait_for_
-        RemoveVertex(abort_txn_id);
+        // RemoveVertex(abort_txn_id);
+        // 我们为了死锁检测其实不一定真的把那个点删除，我们用visited将其标记为安全就行了，或者只删除出边
+        visited_.insert(abort_txn_id);
       }
       std::lock_guard<std::mutex> guard(waits_for_latch_);
       waits_for_.clear();
-      unsafe_nodes_.clear();
       waits_for_table_.clear();
       waits_for_row_.clear();
+      visited_.clear();
     }
   }
 }
@@ -929,18 +899,34 @@ auto LockManager::DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t>
   return false;
 }
 
-auto LockManager::FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path,
-                            std::unordered_set<txn_id_t> &on_path,
-                            std::unordered_set<txn_id_t> &visited,
-                            txn_id_t *abort_txn_id) -> bool {
-
+auto LockManager::FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, std::unordered_set<txn_id_t> &on_path,
+                            std::unordered_set<txn_id_t> &visited, txn_id_t *abort_txn_id) -> bool {
+  path.push_back(source_txn);
+  on_path.insert(source_txn);
+  visited.insert(source_txn);
+  if (auto iter = waits_for_.find(source_txn); iter != waits_for_.end()) {
+    for (const auto &neighbor : iter->second) {
+      if (visited.find(neighbor) == visited.end()) {
+        if (FindCycle(neighbor, path, on_path, visited, abort_txn_id)) {
+          visited.erase(source_txn);  // 表示下次还需要重新dfs这个点,source_txn不一定是安全无环的
+          return true;
+        }
+      } else if (on_path.find(neighbor) != on_path.end()) {
+        visited.erase(source_txn);
+        auto cycle_begin = std::find(path.begin(), path.end(), neighbor);
+        *abort_txn_id = *std::max_element(cycle_begin, path.end());
+        return true;
+      }
+    }
+  }
+  path.pop_back();
+  on_path.erase(source_txn);
+  // visited也表示安全
   return false;
 }
 
-
 void LockManager::RemoveVertex(txn_id_t txn_id) {
   std::lock_guard<std::mutex> guard(waits_for_latch_);
-  unsafe_nodes_.erase(txn_id);
   waits_for_.erase(txn_id);
   // 其实为了检测死锁，没必要把指向aborted_txn_id的边也去除
   for (auto &[_, v2_s] : waits_for_) {
@@ -1058,9 +1044,9 @@ void LockManager::AddWaitsForRow(txn_id_t txn_id, RID rid) {
 void LockManager::BuildDeadlockDetectionGraph() {
   // 找到所有granted,然后non-granted看是否与granted冲突，冲突则需要等待
   waits_for_.clear();
-  unsafe_nodes_.clear();
   waits_for_table_.clear();
   waits_for_row_.clear();
+  visited_.clear();
   std::unique_lock<std::mutex> table_lock(table_lock_map_latch_);
   // FIXME(gukele): 缩小锁的范围？反正也request_queue也需要加锁，所以实际上无法保证获取当前时刻的所有请求队列的快照
   // std::unique_lock<std::mutex> row_lock(row_lock_map_latch_);
@@ -1107,12 +1093,9 @@ void LockManager::BuildDeadlockDetectionGraph() {
     }
   }
   row_lock.unlock();
-  // 3.构建unvisited、unsafe_nodes_
+
+  // 3.构建unvisited,可以将visited优化成unvisited
   std::lock_guard<std::mutex> guard(waits_for_latch_);
-  unsafe_nodes_.reserve(waits_for_.size());
-  for (const auto &[txn_id, _] : waits_for_) {
-    unsafe_nodes_.insert(txn_id);
-  }
 }
 
 }  // namespace bustub
