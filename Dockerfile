@@ -1,18 +1,24 @@
 FROM ubuntu:22.04
-CMD bash
 
-# Install Ubuntu packages.
-# Please add packages in alphabetical order.
 ARG DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i 's#http://archive.ubuntu.com/#http://mirrors.tuna.tsinghua.edu.cn/#' /etc/apt/sources.list
+
 RUN apt-get -y update && \
+    apt upgrade && \
     apt-get -y install \
       build-essential \
-      clang-12 \
-      clang-format-12 \
-      clang-tidy-12 \
+      clang-14 \
+      clang-format-14 \
+      clang-tidy-14 \
+      clandd \
       cmake \
       doxygen \
       git \
       g++-12 \
+      gdb \
       pkg-config \
-      zlib1g-dev
+      zlib1g-dev \
+      vim
+
+CMD bash

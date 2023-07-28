@@ -278,7 +278,7 @@ class BPlusTree {
   std::vector<std::string> log;  // NOLINT
   int leaf_max_size_;
   int internal_max_size_;
-  page_id_t header_page_id_;
+  page_id_t header_page_id_;  // 空头结点？
 };
 
 /**

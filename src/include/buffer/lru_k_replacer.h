@@ -44,9 +44,9 @@ class LRUKNode {
  private:
   // [[maybe_unused]] std::list<size_t> history_;
   // k_是访问次数
-  [[maybe_unused]] size_t k_{1};
+  size_t k_{1};
   [[maybe_unused]] frame_id_t fid_;  // 其实冗余了
-  [[maybe_unused]] bool is_evictable_{false};
+  bool is_evictable_{false};
 };
 
 /**
@@ -192,7 +192,7 @@ class LRUKReplacer {
 
   size_t max_frame_capacity_;
   size_t k_;
-  // size_t curr_size_{0};  // 使用nondes_.size()代替
+  // size_t curr_size_{0};  // 使用nodes_.size()代替
   size_t replacer_size_{0};  // 有多少可以置换出去的
   std::mutex latch_;
 };

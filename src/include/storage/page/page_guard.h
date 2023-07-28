@@ -8,7 +8,8 @@ namespace bustub {
 class BufferPoolManager;
 
 /**
- * @brief 和传统的RAII手法不太一样，初始化并不获取锁，而只是在析构时释放锁
+ * @brief 和传统的RAII手法不太一样，初始化并不 pin，因为 Fetch page 的时候就马上 pin 了，所以只是构造这个
+ * guard，保证析构时自动的 unpin。
  *
  */
 class BasicPageGuard {
@@ -110,6 +111,8 @@ class BasicPageGuard {
 class ReadPageGuard {
  public:
   ReadPageGuard() = default;
+
+  // TODO(gukele): RAII? 虽然 basic page guard 获取资源时并不 pin，但是这里是 read latch，可以获取资源时初始化
   ReadPageGuard(BufferPoolManager *bpm, Page *page) : guard_(bpm, page) {
     // if (page != nullptr) {
     //   page->RLatch();

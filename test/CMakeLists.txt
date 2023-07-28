@@ -32,6 +32,7 @@ foreach (bustub_test_source ${BUSTUB_TEST_SOURCES})
     add_dependencies(build-tests ${bustub_test_name})
     add_dependencies(check-tests ${bustub_test_name})
 
+    # 这是用于发现 GTest 测试用例的函数。通过这个函数，CMake 将自动发现并注册测试用例，无需手动列举它们。
     gtest_discover_tests(${bustub_test_name}
             EXTRA_ARGS
             --gtest_color=auto

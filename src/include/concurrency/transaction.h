@@ -39,7 +39,7 @@ namespace bustub {
 /**
  * 只有释放X、S锁才可能进入shrinking阶段，X锁的释放一定会转入shrinking。
  *
- * 读为提交：
+ * 读未提交：
  *    释放X锁才会转入shrinking。在shrinking阶段不可以加任何锁；在growing阶段可以加X、IX锁。
  *    读未提交不允许加S、IS、SIX锁。
  *    实际上就是普通两阶段锁，存在脏读、级联abort问题。
@@ -51,6 +51,13 @@ namespace bustub {
  * 可重复读：
  *    释放X/S锁都会转入shrinking。在shrinking阶段不可以加任何锁；在growing阶段可以加任何锁。
  *    实际上就是强严格两阶段锁。
+ */
+
+/**
+ * MVCC（并发版本控制）
+ *     在MVCC中，有了当前读的概念，此时读提交和可重复读都不需要加读锁了，因为undo log和一致性视图可以找到历史版本。
+ *     普通读不需要加锁，只有特殊的读，例如SELECT … LOCK IN SHARE MODE/FOR UPDATE的读会加读锁/写锁
+ *
  */
 
 /**

@@ -1,5 +1,10 @@
-# CMU15-445 2023 Spring.
-完成了除了primer的所有实验，P2、P3、P4在leader board获取了较好的排名。P1没有做优化，以后可能会选取更好的页面替换算法。
+# [CMU15-445 2023 Spring](https://15445.courses.cs.cmu.edu/spring2023/assignments.html)
+完成了除了primer的所有实验，同时还实现了leaderboard中的挑战任务，例如：常量折叠、谓词下推、列裁剪、投影消除等优化。P2、P3、P4在leaderboard获取了较好的排名。P1没有做优化，以后可能会选取更好的页面替换算法，例如像mysql一样对scan做优化。
+![p4排行榜](image.png)
+
+一开始并未想要公开代码，所以代码中有很多笔记和注释，并且2023已经过去了，听说后续的课程中加入了MVCC的lab，推荐大家做更新的。虽然CMU15445、MIT6.824这种项目好像已经烂大街了，但是在leaderboard可以看到，2024都快过去一半了，完成2023-spring-CMU15445 p4的只有一百多位，完成可选的挑战任务的人数就更少了。
+
+CMU15-445是非常优秀的项目，不只是数据库方面的知识，可以感受到老师们在有意的引导学生学习C++11-17的特性、C++开发环境等。羡慕CMU的学生可以在课堂中学习到那么丰富的知识。同时也非常感谢老师和助教的贡献。
 
 -----------------
 
@@ -29,7 +34,7 @@ The following instructions are adapted from the Github documentation on [duplica
 3. Next, [mirror](https://git-scm.com/docs/git-push#Documentation/git-push.txt---mirror) the public BusTub repository to your own private BusTub repository. Suppose your GitHub name is `student` and your repository name is `bustub-private`. The procedure for mirroring the repository is then:
    ```
    $ cd bustub-public
-   
+
    # If you pull / push over HTTPS
    $ git push https://github.com/student/bustub-private.git master
 
@@ -168,5 +173,5 @@ to open a shell within the box. You can find Bustub's code mounted at `/bustub` 
 
 ```
 $ cd build
-$ make check-tests
+$ make check-tests -j`nproc`
 ```

@@ -174,7 +174,7 @@ TEST(otherBufferPoolManagerTest, SampleTest) {
   for (int i = 10; i < 15; ++i) {
     EXPECT_EQ(nullptr, bpm.NewPage(&temp_page_id));
   }
-  // upin the first five pages, add them to LRU list, set as dirty
+  // unpin the first five pages, add them to LRU list, set as dirty
   for (int i = 0; i < 5; ++i) {
     EXPECT_EQ(true, bpm.UnpinPage(i, true));
   }
@@ -192,7 +192,7 @@ TEST(otherBufferPoolManagerTest, SampleTest) {
   delete disk_manager;
 }
 
-TEST(otherBufferPoolManagerTest, SampleTest2) {
+TEST(otherBufferPoolManagerTest, SampleTest_2) {
   page_id_t temp_page_id;
 
   auto *disk_manager = new DiskManager("test.db");
@@ -213,7 +213,7 @@ TEST(otherBufferPoolManagerTest, SampleTest2) {
     EXPECT_NE(nullptr, bpm.NewPage(&temp_page_id));
   }
 
-  // upin the first five pages, add them to LRU list, set as dirty
+  // unpin the first five pages, add them to LRU list, set as dirty
   for (int i = 0; i < 1; ++i) {
     EXPECT_EQ(true, bpm.UnpinPage(i, true));
     page_zero = bpm.FetchPage(0);
@@ -243,6 +243,397 @@ TEST(otherBufferPoolManagerTest, SampleTest2) {
   remove("test.db");
 
   delete disk_manager;
+}
+
+TEST(BufferPoolManagerTest, HardTest_1) {  // NOLINT
+  page_id_t temp_page_id;
+  auto *disk_manager = new DiskManager("test.db");
+  auto *bpm = new BufferPoolManager(10, disk_manager, 5);
+
+  std::vector<page_id_t> page_ids;
+  for (int j = 0; j < 1000; j++) {
+    for (int i = 0; i < 10; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      std::snprintf(new_page->GetData(), sizeof(new_page->GetData()), "%s",
+                    std::to_string(temp_page_id).c_str());  // NOLINT
+      page_ids.push_back(temp_page_id);
+    }
+    for (unsigned int i = page_ids.size() - 10; i < page_ids.size() - 5; i++) {
+      ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], false));
+    }
+    for (unsigned int i = page_ids.size() - 5; i < page_ids.size(); i++) {
+      ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], true));
+    }
+  }
+
+  for (int j = 0; j < 10000; j++) {
+    auto *page = bpm->FetchPage(page_ids[j]);
+    ASSERT_NE(nullptr, page);
+    if (j % 10 < 5) {
+      ASSERT_NE(0, std::strcmp(std::to_string(page_ids[j]).c_str(), (page->GetData())));
+    } else {
+      ASSERT_EQ(0, std::strcmp(std::to_string(page_ids[j]).c_str(), (page->GetData())));
+    }
+    ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], true));
+  }
+
+  auto rng = std::default_random_engine{};
+  std::shuffle(page_ids.begin(), page_ids.end(), rng);
+
+  for (int j = 0; j < 5000; j++) {
+    auto *page = bpm->FetchPage(page_ids[j]);
+    ASSERT_NE(nullptr, page);
+    ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+    ASSERT_EQ(1, bpm->DeletePage(page_ids[j]));
+  }
+
+  for (int j = 5000; j < 10000; j++) {
+    auto *page = bpm->FetchPage(page_ids[j]);
+    ASSERT_NE(nullptr, page);
+    if (page_ids[j] % 10 < 5) {
+      ASSERT_NE(0, std::strcmp(std::to_string(page_ids[j]).c_str(), (page->GetData())));
+    } else {
+      ASSERT_EQ(0, std::strcmp(std::to_string(page_ids[j]).c_str(), (page->GetData())));
+    }
+    ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+    ASSERT_EQ(1, bpm->DeletePage(page_ids[j]));
+  }
+
+  remove("test.db");
+  remove("test.log");
+  delete bpm;
+  delete disk_manager;
+}
+
+TEST(BufferPoolManagerTest, HardTest_2) {  // NOLINT
+  const int num_threads = 5;
+  const int num_runs = 50;
+  for (int run = 0; run < num_runs; run++) {
+    auto *disk_manager = new DiskManager("test.db");
+    std::shared_ptr<BufferPoolManager> bpm{new BufferPoolManager(50, disk_manager)};
+    std::vector<std::thread> threads;
+
+    page_id_t temp_page_id;
+    std::vector<page_id_t> page_ids;
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      std::snprintf(new_page->GetData(), sizeof(new_page->GetData()), "%s",
+                    std::to_string(temp_page_id).c_str());  // NOLINT
+      page_ids.push_back(temp_page_id);
+    }
+
+    for (int i = 0; i < 50; i++) {
+      if (i % 2 == 0) {  // 偶数被标记为dirty
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], true));
+      } else {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], false));
+      }
+    }
+
+    // 将之前的page替换一轮并刷盘(只有偶数被标记为dirty)
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, true));
+    }
+
+    for (int j = 0; j < 50; j++) {
+      auto *page = bpm->FetchPage(page_ids[j]);
+      ASSERT_NE(nullptr, page);
+      std::snprintf(page->GetData(), sizeof(page->GetData()), "%s",
+                    (std::string("Hard") + std::to_string(page_ids[j])).c_str());  // NOLINT
+    }
+
+    for (int i = 0; i < 50; i++) {
+      if (i % 2 == 0) {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], false));
+      } else {  // 奇数被标记为dirty
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], true));
+      }
+    }
+
+    // 将之前的page替换一轮并刷盘(只有奇数被标记为dirty)，所以前五十中偶数page内容为page id，而奇数为Hard + page id
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, true));
+    }
+
+    for (int tid = 0; tid < num_threads; tid++) {
+      threads.push_back(std::thread([&bpm, tid, page_ids]() {  // NOLINT
+        int j = (tid * 10);
+        while (j < 50) {
+          auto *page = bpm->FetchPage(page_ids[j]);
+          while (page == nullptr) {
+            page = bpm->FetchPage(page_ids[j]);
+          }
+          ASSERT_NE(nullptr, page);
+          if (j % 2 == 0) {
+            // FIGURE OUT(gukele): 为什么此时GetData() 不需要加读锁呢？
+            ASSERT_EQ(0, std::strcmp(std::to_string(page_ids[j]).c_str(), (page->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+          } else {
+            ASSERT_EQ(0, std::strcmp((std::string("Hard") + std::to_string(page_ids[j])).c_str(), (page->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+          }
+          j = (j + 1);
+        }
+      }));
+    }
+
+    for (int i = 0; i < num_threads; i++) {
+      threads[i].join();
+    }
+
+    for (int j = 0; j < 50; j++) {
+      ASSERT_EQ(1, bpm->DeletePage(page_ids[j]));
+    }
+
+    remove("test.db");
+    remove("test.log");
+    delete disk_manager;
+  }
+}
+
+TEST(BufferPoolManagerTest, HardTest_3) {  // NOLINT
+  const int num_threads = 5;
+  const int num_runs = 50;
+  for (int run = 0; run < num_runs; run++) {
+    auto *disk_manager = new DiskManager("test.db");
+    std::shared_ptr<BufferPoolManager> bpm{new BufferPoolManager(50, disk_manager)};
+    std::vector<std::thread> threads;
+
+    page_id_t temp_page_id;
+    std::vector<page_id_t> page_ids;
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      std::snprintf(new_page->GetData(), sizeof(new_page->GetData()), "%s",
+                    std::to_string(temp_page_id).c_str());  // NOLINT
+      page_ids.push_back(temp_page_id);
+    }
+
+    for (int i = 0; i < 50; i++) {
+      if (i % 2 == 0) {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], true));
+      } else {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], false));
+      }
+    }
+
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, true));
+    }
+
+    for (int j = 0; j < 50; j++) {
+      auto *page = bpm->FetchPage(page_ids[j]);
+      ASSERT_NE(nullptr, page);
+      std::snprintf(page->GetData(), sizeof(page->GetData()), "%s",
+                    (std::string("Hard") + std::to_string(page_ids[j])).c_str());  // NOLINT
+    }
+
+    for (int i = 0; i < 50; i++) {
+      if (i % 2 == 0) {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], false));
+      } else {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], true));
+      }
+    }
+
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, true));
+    }
+
+    for (int tid = 0; tid < num_threads; tid++) {
+      threads.push_back(std::thread([&bpm, tid, page_ids]() {  // NOLINT
+        page_id_t temp_page_id;
+        int j = (tid * 10);
+        while (j < 50) {
+          if (j != tid * 10) {
+            auto *page_local = bpm->FetchPage(temp_page_id);
+            while (page_local == nullptr) {
+              page_local = bpm->FetchPage(temp_page_id);
+            }
+            ASSERT_NE(nullptr, page_local);
+            ASSERT_EQ(0, std::strcmp(std::to_string(temp_page_id).c_str(), (page_local->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, false));
+            // If the page is still in buffer pool then put it in free list,
+            // else also we are happy
+            ASSERT_EQ(1, bpm->DeletePage(temp_page_id));
+          }
+
+          auto *page = bpm->FetchPage(page_ids[j]);
+          while (page == nullptr) {
+            page = bpm->FetchPage(page_ids[j]);
+          }
+          ASSERT_NE(nullptr, page);
+          if (j % 2 == 0) {
+            ASSERT_EQ(0, std::strcmp(std::to_string(page_ids[j]).c_str(), (page->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+          } else {
+            ASSERT_EQ(0, std::strcmp((std::string("Hard") + std::to_string(page_ids[j])).c_str(), (page->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+          }
+          j = (j + 1);
+
+          page = bpm->NewPage(&temp_page_id);
+          while (page == nullptr) {
+            page = bpm->NewPage(&temp_page_id);
+          }
+          ASSERT_NE(nullptr, page);
+          std::snprintf(page->GetData(), sizeof(page->GetData()), "%s",
+                        std::to_string(temp_page_id).c_str());  // NOLINT
+          ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, true));
+        }
+      }));
+    }
+
+    for (int i = 0; i < num_threads; i++) {
+      threads[i].join();
+    }
+
+    for (int j = 0; j < 50; j++) {
+      ASSERT_EQ(1, bpm->DeletePage(page_ids[j]));
+    }
+
+    remove("test.db");
+    remove("test.log");
+    delete disk_manager;
+  }
+}
+
+TEST(BufferPoolManagerTest, HardTest_4) {  // NOLINT
+  const int num_threads = 5;
+  const int num_runs = 50;
+  for (int run = 0; run < num_runs; run++) {
+    auto *disk_manager = new DiskManager("test.db");
+    std::shared_ptr<BufferPoolManager> bpm{new BufferPoolManager(50, disk_manager)};
+    std::vector<std::thread> threads;
+
+    page_id_t temp_page_id;
+    std::vector<page_id_t> page_ids;
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      ASSERT_NE(nullptr, new_page);
+      std::snprintf(new_page->GetData(), sizeof(new_page->GetData()), "%s",
+                    std::to_string(temp_page_id).c_str());  // NOLINT
+      page_ids.push_back(temp_page_id);
+    }
+
+    for (int i = 0; i < 50; i++) {
+      if (i % 2 == 0) {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], true));
+      } else {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], false));
+      }
+    }
+
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, true));
+    }
+
+    for (int j = 0; j < 50; j++) {
+      auto *page = bpm->FetchPage(page_ids[j]);
+      ASSERT_NE(nullptr, page);
+      std::snprintf(page->GetData(), sizeof(page->GetData()), "%s",
+                    (std::string("Hard") + std::to_string(page_ids[j])).c_str());  // NOLINT
+    }
+
+    for (int i = 0; i < 50; i++) {
+      if (i % 2 == 0) {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], false));
+      } else {
+        ASSERT_EQ(1, bpm->UnpinPage(page_ids[i], true));
+      }
+    }
+
+    for (int i = 0; i < 50; i++) {
+      auto *new_page = bpm->NewPage(&temp_page_id);
+      ASSERT_NE(nullptr, new_page);
+      ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, true));
+    }
+
+    for (int tid = 0; tid < num_threads; tid++) {
+      threads.push_back(std::thread([&bpm, tid, page_ids]() {  // NOLINT
+        page_id_t temp_page_id;
+        int j = (tid * 10);
+        while (j < 50) {
+          if (j != tid * 10) {
+            auto *page_local = bpm->FetchPage(temp_page_id);
+            while (page_local == nullptr) {
+              page_local = bpm->FetchPage(temp_page_id);
+            }
+            ASSERT_NE(nullptr, page_local);
+            ASSERT_EQ(0, std::strcmp(std::to_string(temp_page_id).c_str(), (page_local->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, false));
+            // If the page is still in buffer pool then put it in free list,
+            // else also we are happy
+            ASSERT_EQ(1, bpm->DeletePage(temp_page_id));
+          }
+
+          auto *page = bpm->FetchPage(page_ids[j]);
+          while (page == nullptr) {
+            page = bpm->FetchPage(page_ids[j]);
+          }
+          ASSERT_NE(nullptr, page);
+          if (j % 2 == 0) {
+            ASSERT_EQ(0, std::strcmp(std::to_string(page_ids[j]).c_str(), (page->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+          } else {
+            ASSERT_EQ(0, std::strcmp((std::string("Hard") + std::to_string(page_ids[j])).c_str(), (page->GetData())));
+            ASSERT_EQ(1, bpm->UnpinPage(page_ids[j], false));
+          }
+          j = (j + 1);
+
+          page = bpm->NewPage(&temp_page_id);
+          while (page == nullptr) {
+            page = bpm->NewPage(&temp_page_id);
+          }
+          ASSERT_NE(nullptr, page);
+          std::snprintf(page->GetData(), sizeof(page->GetData()), "%s",
+                        std::to_string(temp_page_id).c_str());  // NOLINT
+          // FLush page instead of unpinning with true
+          ASSERT_EQ(1, bpm->FlushPage(temp_page_id));
+          ASSERT_EQ(1, bpm->UnpinPage(temp_page_id, false));
+
+          // Flood with new pages
+          for (int k = 0; k < 10; k++) {
+            page_id_t flood_page_id;
+            auto *flood_page = bpm->NewPage(&flood_page_id);
+            while (flood_page == nullptr) {
+              flood_page = bpm->NewPage(&flood_page_id);
+            }
+            ASSERT_NE(nullptr, flood_page);
+            ASSERT_EQ(1, bpm->UnpinPage(flood_page_id, false));
+            // If the page is still in buffer pool then put it in free list,
+            // else also we are happy
+            ASSERT_EQ(1, bpm->DeletePage(flood_page_id));
+          }
+        }
+      }));
+    }
+
+    for (int i = 0; i < num_threads; i++) {
+      threads[i].join();
+    }
+
+    for (int j = 0; j < 50; j++) {
+      ASSERT_EQ(1, bpm->DeletePage(page_ids[j]));
+    }
+
+    remove("test.db");
+    remove("test.log");
+    delete disk_manager;
+  }
 }
 
 }  // namespace bustub

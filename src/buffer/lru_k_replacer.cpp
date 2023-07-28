@@ -32,7 +32,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {
-  BUSTUB_ASSERT(frame_id < static_cast<int32_t>(max_frame_capacity_), "the frame_id dxceeding capacity");
+  BUSTUB_ASSERT(frame_id < static_cast<int32_t>(max_frame_capacity_), "the frame_id exceeding capacity");
   std::lock_guard<std::mutex> gurad(latch_);
   auto map_it = nodes_.find(frame_id);
   if (map_it == nodes_.end()) {
@@ -45,7 +45,14 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
   } else {  // 本来就有
     auto list_it = map_it->second.first;
     auto &node = map_it->second.second;
+
+    // TODO(gukele): 如果是scan，则不需要增加k?
+    // if (access_type != AccessType::Scan) {
+    //   node.SetK();
+    // }
+
     node.SetK();
+
     if (node.GetK() >= k_) {  // 需要从non_k_nodes_转移到k_nodes_头部
       k_nodes_lru_.splice(k_nodes_lru_.begin(), non_k_nodes_fifo_, list_it);
     }
@@ -114,6 +121,7 @@ auto LRUKReplacer::EvictImpl(frame_id_t *frame_id) -> bool {
       return true;
     }
   }
+
   // 找不到就从k_nond_lru_逆序lru找到
   for (auto it = k_nodes_lru_.rbegin(); it != k_nodes_lru_.rend(); ++it) {
     auto &node = nodes_[*it].second;

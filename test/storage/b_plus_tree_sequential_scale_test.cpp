@@ -57,7 +57,7 @@ TEST(BPlusTreeTests, ScaleTest) {  // NOLINT
   // randomized the insertion order
   auto rng = std::default_random_engine{};
   std::shuffle(keys.begin(), keys.end(), rng);
-  int count = 0;
+  [[maybe_unused]] int count = 0;
   for (auto key : keys) {
     ++count;
     int64_t value = key & 0xFFFFFFFF;

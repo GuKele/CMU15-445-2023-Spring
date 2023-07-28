@@ -12,14 +12,11 @@
 
 #pragma once
 
-#include <algorithm>
 #include <condition_variable>  // NOLINT
 #include <list>
-#include <map>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <optional>
-#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -411,12 +408,12 @@ class LockManager {
 
   auto CheckNotHoldAppropriateLockOnRow(Transaction *txn, const table_oid_t &oid, LockMode table_lock_mode) -> bool;
 
-  [[unused]] auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path,
-                               std::unordered_set<txn_id_t> &visited, std::unordered_set<txn_id_t> &connected_component)
-      -> bool;
+  [[maybe_unused]] auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path,
+                                     std::unordered_set<txn_id_t> &visited,
+                                     std::unordered_set<txn_id_t> &connected_component) -> bool;
 
-  [[unused]] auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path,
-                               std::unordered_set<txn_id_t> &unvisited, txn_id_t *abort_txn_id) -> bool;
+  [[maybe_unused]] auto DFSFindCycle(txn_id_t source_txn, std::unordered_set<txn_id_t> &on_path,
+                                     std::unordered_set<txn_id_t> &unvisited, txn_id_t *abort_txn_id) -> bool;
 
   auto FindCycle(txn_id_t source_txn, std::vector<txn_id_t> &path, std::unordered_set<txn_id_t> &on_path,
                  std::unordered_set<txn_id_t> &visited, txn_id_t *abort_txn_id) -> bool;
@@ -456,6 +453,7 @@ class LockManager {
   void AddWaitsForRow(txn_id_t txn_id, RID rid);
   void BuildDeadlockDetectionGraph();
 
+ private:
   /** Structure that holds lock requests for a given table oid */
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
   /** Coordination */

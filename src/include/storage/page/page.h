@@ -97,7 +97,7 @@ class Page {
   // we store it as a ptr.
   // b+树中，data_就是指向b+树的一个叶子或非叶子节点. table heap中就是一个指向TablePage的指针.
   // 总之就是一个指向一整块page的指针
-  char *data_;
+  char *data_;  // GUARDED_BY(rwlatch_);
   /** The ID of this page. */
   page_id_t page_id_ = INVALID_PAGE_ID;
   /** The pin count of this page. */

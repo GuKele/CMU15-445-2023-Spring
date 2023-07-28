@@ -12,11 +12,7 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstdlib>
-#include <functional>
-#include <iostream>
-#include <string>
 
 #include "common/macros.h"
 #include "type/value.h"

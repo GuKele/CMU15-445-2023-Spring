@@ -230,7 +230,7 @@ TEST(BPlusTreeTests, DeleteTest2) {
   EXPECT_EQ(current_key, keys.size() + 1);
 
   std::vector<int64_t> remove_keys = {1, 5, 3, 4};
-  int count = 0;
+  [[maybe_unused]] int count = 0;
   for (auto key : remove_keys) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);

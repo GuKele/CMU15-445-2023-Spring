@@ -15,7 +15,9 @@
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <shared_mutex>
 #include <unordered_map>
+#include <vector>
 
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
@@ -192,32 +194,32 @@ class BufferPoolManager {
   /**
    * @brief Get the Avail Frame, non-thread-safe
    *
-   * @param frame_id id of frame avaliable
-   * @return true if we can get a frame avaliable
+   * @param frame_id id of frame available
+   * @return true if we can get a frame available
    */
   auto GetAvailFrame(frame_id_t *frame_id) -> bool;
 
   /**
    * @brief reset metadata of page, you should promise the pointer of page is right
    *
-   * @param page the page to be reseted metadata
+   * @param page the page to be reset metadata
    * @return void
    */
   inline void ResetPageMetadata(Page *page) {
     page->pin_count_ = 0;
-    page->page_id_ = 0;
+    page->page_id_ = INVALID_PAGE_ID;
     page->is_dirty_ = false;
     // page->rwlatch_;
   }
 
   /**
-   * @brief add a page into the frame,record the access history of the frame in the replacer for the lru-k algorithm to
-   * work,pin the page,you should promise the frame of frame_id is available
+   * @brief add a page into the available frame(without page data), record the access history of the frame in the
+   * replacer for the lru-k algorithm to work, pin the page, you should promise the frame of frame_id is available
    *
    * @param page_id id of page to be added
    * @param frame_id id of frame to be used by page
    */
-  void AddPage(page_id_t page_id, frame_id_t frame_id);
+  void AddPage(page_id_t page_id, frame_id_t frame_id, AccessType access_type = AccessType::Unknown);
 
   /**
    * @brief delete the page in frame of frame_id and delete this frame from lru_k_replacer
@@ -225,7 +227,7 @@ class BufferPoolManager {
    *
    * @param frame_id id of frame to be deleted
    */
-  void DeletePageImpe(frame_id_t frame_id);
+  void DeletePageImpl(frame_id_t frame_id);
 
  private:
   /** Number of pages in the buffer pool. */
@@ -234,22 +236,28 @@ class BufferPoolManager {
   std::atomic<page_id_t> next_page_id_ = 0;
 
   /** Array of buffer pool pages. */
-  // 所有的pages就是pool的一个个槽，frame_id就是这些pool槽的下标
+  // 所有的pages就是buffer pool的一个个槽，frame_id就是这些pool槽的下标,包括了page的元数据和page的数据区
   Page *pages_;
+  /*
+   * 用来保护frame。主要为了在读盘的时候释放bpm的锁，让其他线程可以继续操作。
+   * 简单来说就是读磁盘的时候拿frame写锁，释放bpm锁，而读完盘后想要读frame上的page的data时都需要拿frame读锁。
+   * 只所以不用page自己的latch，是因为测试用例中很多读page data时不加锁。所以又自己又加一层锁。
+   * 刷盘不用是因为考虑到刷盘未完成前，如果又有线程想读该page，可能从磁盘读出来还未刷完的旧的，所以暂时不考虑刷盘释放bpm锁。
+   */
+  std::vector<std::shared_mutex> frame_latches_;
   /** Pointer to the disk manager. */
-  DiskManager *disk_manager_ __attribute__((__unused__));
+  DiskManager *disk_manager_;
   /** Pointer to the log manager. Please ignore this for P1. */
-  LogManager *log_manager_ __attribute__((__unused__));
+  [[maybe_unused]] LogManager *log_manager_;
   /** Page table for keeping track of buffer pool pages. */
   std::unordered_map<page_id_t, frame_id_t> page_table_;
   /** Replacer to find unpinned pages for replacement. */
   std::unique_ptr<LRUKReplacer> replacer_;
   /** List of free frames that don't have any pages on them. */
-  // keep bezero frame in the free_list_
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   // 保护上边所有的数据，是一把大锁
-  // TODO(gukele) 优化锁的粒度
+  // TODO(gukele): 优化锁的粒度，换成读写锁
   std::mutex latch_;
 
   /**
@@ -262,7 +270,7 @@ class BufferPoolManager {
    * @brief Deallocate a page on disk. Caller should acquire the latch before calling this function.
    * @param page_id id of the page to deallocate
    */
-  void DeallocatePage(__attribute__((unused)) page_id_t page_id) {
+  void DeallocatePage([[maybe_unused]] page_id_t page_id) {
     // This is a no-nop right now without a more complex data structure to track deallocated pages
   }
 

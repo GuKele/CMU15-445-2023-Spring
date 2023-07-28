@@ -13,12 +13,9 @@
 #include "concurrency/lock_manager.h"
 
 #include <algorithm>
-#include <cassert>
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <shared_mutex>
-#include <stack>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -27,8 +24,6 @@
 #include "common/macros.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
-#include "execution/executors/topn_executor.h"
-#include "storage/table/tuple.h"
 
 namespace bustub {
 

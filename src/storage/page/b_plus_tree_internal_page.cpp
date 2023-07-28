@@ -11,15 +11,11 @@
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
-#include <iterator>
-#include <sstream>
 
 #include "common/config.h"
 #include "common/exception.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_page.h"
-#include "storage/page/page_guard.h"
 
 namespace bustub {
 /*****************************************************************************

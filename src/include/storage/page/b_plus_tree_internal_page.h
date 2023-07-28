@@ -36,6 +36,12 @@ namespace bustub {
  *  --------------------------------------------------------------------------
  * | HEADER | KEY(1)+PAGE_ID(1) | KEY(2)+PAGE_ID(2) | ... | KEY(n)+PAGE_ID(n) |
  *  --------------------------------------------------------------------------
+ *
+ *  Header format (size in byte, 12 bytes in total):
+ *  ---------------------------------------------------------------------
+ * | PageType (4) | CurrentSize (4) | MaxSize (4) |
+ *  ---------------------------------------------------------------------
+ *
  */
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeInternalPage : public BPlusTreePage {

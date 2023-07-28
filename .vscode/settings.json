@@ -1,10 +1,13 @@
 {
   "cSpell.words": [
     "BPLUSTREE",
+    "Evictable",
     "INDEXITERATOR",
     "Innodb",
     "leaderboard",
+    "LRUK",
     "neighbours",
+    "rwlatch",
     "TINYINT",
     "wtype"
   ]

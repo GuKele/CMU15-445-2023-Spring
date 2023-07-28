@@ -12,9 +12,8 @@
 
 #include "buffer/buffer_pool_manager.h"
 
+#include <memory>
 #include "common/config.h"
-#include "common/exception.h"
-#include "common/macros.h"
 #include "storage/page/page.h"
 #include "storage/page/page_guard.h"
 
@@ -22,7 +21,7 @@ namespace bustub {
 
 BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager, size_t replacer_k,
                                      LogManager *log_manager)
-    : pool_size_(pool_size), disk_manager_(disk_manager), log_manager_(log_manager) {
+    : pool_size_(pool_size), frame_latches_(pool_size_), disk_manager_(disk_manager), log_manager_(log_manager) {
   // TODO(students): remove this line after you have implemented the buffer pool manager
   // throw NotImplementedException(
   //     "BufferPoolManager is not implemented yet. If you have finished implementing BPM, please remove the throw "
@@ -52,6 +51,7 @@ auto BufferPoolManager::NewPageImpl(page_id_t *page_id) -> Page * {
     *page_id = AllocatePage();
 
     AddPage(*page_id, frame_id);
+    frame_latches_[frame_id].lock_shared();
     return &pages_[frame_id];
   }
 
@@ -70,7 +70,7 @@ auto BufferPoolManager::GetAvailFrame(frame_id_t *frame_id) -> bool {
   if (replacer_->Evict(frame_id)) {
     // 淘汰的框架其实是执行一个删除的page的操作,
     // TODO(gukele): 已经evict了，但是在delete中又再次remove,有些重复浪费了，但是为了代码可读性
-    DeletePageImpe(*frame_id);
+    DeletePageImpl(*frame_id);
 
     return true;
   }
@@ -78,16 +78,16 @@ auto BufferPoolManager::GetAvailFrame(frame_id_t *frame_id) -> bool {
   return false;
 }
 
-void BufferPoolManager::AddPage(page_id_t page_id, frame_id_t frame_id) {
+void BufferPoolManager::AddPage(page_id_t page_id, frame_id_t frame_id, AccessType access_type) {
   auto &page = pages_[frame_id];
   page.page_id_ = page_id;
   page_table_.insert({page_id, frame_id});
 
-  replacer_->RecordAccess(frame_id);
+  replacer_->RecordAccess(frame_id, access_type);
   PinPageImpl(frame_id);
 }
 
-void BufferPoolManager::DeletePageImpe(frame_id_t frame_id) {
+void BufferPoolManager::DeletePageImpl(frame_id_t frame_id) {
   auto &page = pages_[frame_id];
   // 刷盘
   if (page.IsDirty()) {
@@ -103,21 +103,55 @@ void BufferPoolManager::DeletePageImpe(frame_id_t frame_id) {
   replacer_->Remove(frame_id);
 }
 
+// auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
+//   std::lock_guard<std::mutex> guard(latch_);
+//   if (auto it = page_table_.find(page_id); it != page_table_.end()) {
+//     PinPageImpl(it->second);
+//     return &pages_[it->second];
+//   }
+
+//   // 得到一个新的可用的frame,从磁盘读入page到该frame
+//   if (frame_id_t frame_id; GetAvailFrame(&frame_id)) {
+//     AddPage(page_id, frame_id, access_type);
+
+//     // TODO(gukele): 优化锁的粒度，read disk代价挺大。
+//     disk_manager_->ReadPage(page_id, pages_[frame_id].GetData());
+
+//     return &pages_[frame_id];
+//   }
+
+//   return nullptr;
+// }
+
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
-  std::lock_guard<std::mutex> guard(latch_);
-  if (auto it = page_table_.find(page_id); it != page_table_.end()) {
-    PinPageImpl(it->second);
-    return &pages_[it->second];
+  frame_id_t frame_id;
+
+  {
+    std::lock_guard<std::mutex> guard(latch_);
+    if (auto it = page_table_.find(page_id); it != page_table_.end()) {
+      auto frame_id = it->second;
+      PinPageImpl(frame_id);
+      frame_latches_[frame_id].lock_shared();
+      return &pages_[frame_id];
+    }
+
+    if (!GetAvailFrame(&frame_id)) {
+      return nullptr;
+    }
+
+    // 得到一个新的可用的frame,从磁盘读入page到该frame
+    AddPage(page_id, frame_id, access_type);
+
+    // BUG(gukele):
+    // 使用page的lock之所以会出错是因为测试包括后面的b+树测试中有时候读并不会加page锁。当两个线程同时读同一个page，第一个线程先拿到bpm的latch，然后将page增加到了table等数据结构中，释放latch再读盘，而第二个线程读并不会加锁，而是以为直接当前页已经被读盘到内存了，从而出现问题。
+    frame_latches_[frame_id].lock();
   }
 
-  // 得到一个新的可用的frame,从磁盘读入page到该frame
-  if (frame_id_t frame_id; GetAvailFrame(&frame_id)) {
-    AddPage(page_id, frame_id);
-    disk_manager_->ReadPage(page_id, pages_[frame_id].GetData());
-    return &pages_[frame_id];
-  }
+  disk_manager_->ReadPage(page_id, pages_[frame_id].GetData());
+  frame_latches_[frame_id].unlock();
+  frame_latches_[frame_id].lock_shared();
 
-  return nullptr;
+  return &pages_[frame_id];
 }
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
@@ -125,7 +159,8 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
   if (auto it = page_table_.find(page_id); it != page_table_.end() && pages_[it->second].GetPinCount() > 0) {
     auto frame_id = it->second;
     --pages_[frame_id].pin_count_;
-    // TODO(gukele): is_dirty是用或来设置的，因为多次fetch页面，只要有一次fetch后修改了，就应该设置为脏页
+    frame_latches_[frame_id].unlock_shared();
+    // NOTE(gukele): is_dirty是用或来设置的，因为多次fetch页面，只要有一次fetch后修改了，就应该设置为脏页
     pages_[frame_id].is_dirty_ |= is_dirty;
     if (pages_[frame_id].GetPinCount() == 0) {
       replacer_->SetEvictable(frame_id, true);
@@ -160,8 +195,6 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
 }
 
 auto BufferPoolManager::FlushPageImpl(page_id_t page_id) -> bool {
-  // c++17语法糖,if中定义变量
-  // if(auto obj = xx ; bool)
   if (auto it = page_table_.find(page_id); it != page_table_.end()) {
     auto frame_id = it->second;
     disk_manager_->WritePage(page_id, pages_[frame_id].GetData());
@@ -193,8 +226,7 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
 
   auto frame_id = it->second;
   if (auto &page = pages_[frame_id]; page.GetPinCount() == 0) {
-    // TODO(gukele):  没有搞懂这个函数，只是照着描述写了一下
-    DeletePageImpe(frame_id);
+    DeletePageImpl(frame_id);
 
     free_list_.push_back(frame_id);
 
